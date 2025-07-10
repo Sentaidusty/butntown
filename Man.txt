@@ -1391,6 +1391,7 @@ Misc:Divider()
 local lastPosition = nil
 local safeZoneFolder = nil
 
+-- Enhanced SafeZone Creation Function
 local function createSafeZone()
     -- Delete existing safezone if it exists
     if safeZoneFolder then
@@ -1399,7 +1400,13 @@ local function createSafeZone()
     
     -- Create new safezone folder
     safeZoneFolder = Instance.new("Folder", workspace)
-    safeZoneFolder.Name = "SAFEZONEMAP_ULTRA"
+    safeZoneFolder.Name = "SAFEZONE_MAP_ULTRA"
+    
+    -- Store player's last position
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        lastPosition = character.HumanoidRootPart.CFrame
+    end
     
     -- Create natural ground foundation (using parts instead of terrain)
     local groundSize = Vector3.new(512, 10, 512)
@@ -1407,6 +1414,7 @@ local function createSafeZone()
     
     -- Main ground part
     local ground = Instance.new("Part", safeZoneFolder)
+    ground.Name = "GrassBase"
     ground.Size = groundSize
     ground.Position = groundPosition + Vector3.new(0, 5, 0)
     ground.Anchored = true
@@ -1448,6 +1456,7 @@ local function createSafeZone()
     
     -- Water area (using blue parts instead of terrain water)
     local water = Instance.new("Part", safeZoneFolder)
+    water.Name = "Water"
     water.Size = Vector3.new(100, 5, 100)
     water.Position = groundPosition + Vector3.new(0, 10, 0)
     water.Anchored = true
@@ -1456,18 +1465,36 @@ local function createSafeZone()
     water.Material = Enum.Material.Glass
     water.Color = Color3.fromRGB(0, 150, 255)
     
+    -- Add water waves effect
+    local wave1 = Instance.new("Part", water)
+    wave1.Size = Vector3.new(100, 0.5, 100)
+    wave1.Position = water.Position + Vector3.new(0, 0.5, 0)
+    wave1.Anchored = true
+    wave1.CanCollide = false
+    wave1.Transparency = 0.8
+    wave1.Material = Enum.Material.Glass
+    wave1.Color = Color3.fromRGB(0, 180, 255)
+    
     -- Main safe area (wooden platform with amenities)
     local platform = Instance.new("Part", safeZoneFolder)
     platform.Name = "MainPlatform"
     platform.Size = Vector3.new(60, 2, 60)
-    platform.Position = Vector3.new(0, 5000 + 30, 0) -- On top of terrain
+    platform.Position = Vector3.new(0, 5000 + 30, 0)
     platform.Anchored = true
     platform.CanCollide = true
     platform.Material = Enum.Material.WoodPlanks
     platform.Color = Color3.fromRGB(150, 100, 70)
     
+    -- Add wooden texture to platform
+    local texture = Instance.new("Texture", platform)
+    texture.Texture = "rbxassetid://1290034958" -- Wood texture
+    texture.Face = Enum.NormalId.Top
+    texture.StudsPerTileU = 2
+    texture.StudsPerTileV = 2
+    
     -- Add wooden border around platform
     local border = Instance.new("Part", safeZoneFolder)
+    border.Name = "PlatformBorder"
     border.Size = Vector3.new(62, 1, 62)
     border.Position = platform.Position + Vector3.new(0, 1, 0)
     border.Anchored = true
@@ -1481,6 +1508,7 @@ local function createSafeZone()
     
     -- North wall with window
     local northWall = Instance.new("Part", safeZoneFolder)
+    northWall.Name = "NorthWall"
     northWall.Size = Vector3.new(60 + wallThickness*2, wallHeight, wallThickness)
     northWall.Position = platform.Position + Vector3.new(0, wallHeight/2, 30 + wallThickness/2)
     northWall.Anchored = true
@@ -1490,6 +1518,7 @@ local function createSafeZone()
     
     -- Window in north wall
     local northWindow = Instance.new("Part", safeZoneFolder)
+    northWindow.Name = "NorthWindow"
     northWindow.Size = Vector3.new(15, 8, 1)
     northWindow.Position = northWall.Position + Vector3.new(0, 0, 0.5)
     northWindow.Anchored = true
@@ -1500,6 +1529,7 @@ local function createSafeZone()
     
     -- South wall with door
     local southWall1 = Instance.new("Part", safeZoneFolder)
+    southWall1.Name = "SouthWallLeft"
     southWall1.Size = Vector3.new(25, wallHeight, wallThickness)
     southWall1.Position = platform.Position + Vector3.new(-17.5, wallHeight/2, -30 - wallThickness/2)
     southWall1.Anchored = true
@@ -1508,6 +1538,7 @@ local function createSafeZone()
     southWall1.Color = northWall.Color
     
     local southWall2 = southWall1:Clone()
+    southWall2.Name = "SouthWallRight"
     southWall2.Position = platform.Position + Vector3.new(17.5, wallHeight/2, -30 - wallThickness/2)
     southWall2.Parent = safeZoneFolder
     
@@ -1521,8 +1552,16 @@ local function createSafeZone()
     door.Material = Enum.Material.Wood
     door.Color = Color3.fromRGB(100, 60, 30)
     
+    -- Door texture
+    local doorTexture = Instance.new("Texture", door)
+    doorTexture.Texture = "rbxassetid://1290034958" -- Wood texture
+    doorTexture.Face = Enum.NormalId.Front
+    doorTexture.StudsPerTileU = 1
+    doorTexture.StudsPerTileV = 1
+    
     -- Door handle
     local handle = Instance.new("Part", safeZoneFolder)
+    handle.Name = "DoorHandle"
     handle.Size = Vector3.new(0.5, 0.5, 1)
     handle.Position = door.Position + Vector3.new(4, 0, 0.5)
     handle.Anchored = true
@@ -1532,6 +1571,7 @@ local function createSafeZone()
     
     -- East wall with window
     local eastWall = Instance.new("Part", safeZoneFolder)
+    eastWall.Name = "EastWall"
     eastWall.Size = Vector3.new(wallThickness, wallHeight, 60)
     eastWall.Position = platform.Position + Vector3.new(30 + wallThickness/2, wallHeight/2, 0)
     eastWall.Anchored = true
@@ -1541,22 +1581,26 @@ local function createSafeZone()
     
     -- Window in east wall
     local eastWindow = northWindow:Clone()
+    eastWindow.Name = "EastWindow"
     eastWindow.Position = eastWall.Position + Vector3.new(0.5, 0, 0)
     eastWindow.Rotation = Vector3.new(0, 90, 0)
     eastWindow.Parent = safeZoneFolder
     
     -- West wall with window
     local westWall = eastWall:Clone()
+    westWall.Name = "WestWall"
     westWall.Position = platform.Position + Vector3.new(-30 - wallThickness/2, wallHeight/2, 0)
     westWall.Parent = safeZoneFolder
     
     -- Window in west wall
     local westWindow = eastWindow:Clone()
+    westWindow.Name = "WestWindow"
     westWindow.Position = westWall.Position + Vector3.new(-0.5, 0, 0)
     westWindow.Parent = safeZoneFolder
     
     -- Roof with overhang
     local roof = Instance.new("Part", safeZoneFolder)
+    roof.Name = "Roof"
     roof.Size = Vector3.new(70, 1, 70)
     roof.Position = platform.Position + Vector3.new(0, wallHeight, 0)
     roof.Anchored = true
@@ -1564,9 +1608,17 @@ local function createSafeZone()
     roof.Material = Enum.Material.WoodPlanks
     roof.Color = Color3.fromRGB(100, 70, 40)
     
+    -- Roof texture
+    local roofTexture = Instance.new("Texture", roof)
+    roofTexture.Texture = "rbxassetid://1290034958" -- Wood texture
+    roofTexture.Face = Enum.NormalId.Top
+    roofTexture.StudsPerTileU = 2
+    roofTexture.StudsPerTileV = 2
+    
     -- Interior decorations
     -- Wooden table
     local tableTop = Instance.new("Part", safeZoneFolder)
+    tableTop.Name = "TableTop"
     tableTop.Size = Vector3.new(10, 1, 5)
     tableTop.Position = platform.Position + Vector3.new(0, 3, 0)
     tableTop.Anchored = true
@@ -1578,6 +1630,7 @@ local function createSafeZone()
     for i = -1, 1, 2 do
         for j = -1, 1, 2 do
             local leg = Instance.new("Part", safeZoneFolder)
+            leg.Name = "TableLeg"
             leg.Size = Vector3.new(1, 2, 1)
             leg.Position = tableTop.Position + Vector3.new(i*4.5, -1.5, j*2)
             leg.Anchored = true
@@ -1591,6 +1644,7 @@ local function createSafeZone()
     for i = 1, 4 do
         local angle = (i-1) * math.pi/2
         local chair = Instance.new("Part", safeZoneFolder)
+        chair.Name = "Chair"..i
         chair.Size = Vector3.new(3, 3, 3)
         chair.Position = tableTop.Position + Vector3.new(math.cos(angle)*6, 1.5, math.sin(angle)*4)
         chair.Anchored = true
@@ -1600,6 +1654,7 @@ local function createSafeZone()
         
         -- Chair back
         local chairBack = Instance.new("Part", safeZoneFolder)
+        chairBack.Name = "ChairBack"..i
         chairBack.Size = Vector3.new(3, 6, 0.5)
         chairBack.Position = chair.Position + Vector3.new(math.cos(angle)*1.5, 3, math.sin(angle)*1.5)
         chairBack.Anchored = true
@@ -1610,6 +1665,7 @@ local function createSafeZone()
     
     -- Campfire area outside
     local firePit = Instance.new("Part", safeZoneFolder)
+    firePit.Name = "FirePit"
     firePit.Size = Vector3.new(8, 1, 8)
     firePit.Position = platform.Position + Vector3.new(0, 0, -40)
     firePit.Anchored = true
@@ -1620,6 +1676,7 @@ local function createSafeZone()
     -- Fire stones
     for angle = 0, math.pi*2, math.pi/4 do
         local stone = Instance.new("Part", safeZoneFolder)
+        stone.Name = "FireStone"
         stone.Size = Vector3.new(1, math.random(1,2), 1)
         stone.Position = firePit.Position + Vector3.new(math.cos(angle)*4, 0.5, math.sin(angle)*4)
         stone.Anchored = true
@@ -1630,6 +1687,7 @@ local function createSafeZone()
     
     -- Actual fire
     local fire = Instance.new("Fire", firePit)
+    fire.Name = "CampFire"
     fire.Size = 6
     fire.Heat = 15
     fire.Color = Color3.new(1, 0.5, 0.1)
@@ -1637,14 +1695,24 @@ local function createSafeZone()
     
     -- Fire light
     local fireLight = Instance.new("PointLight", firePit)
+    fireLight.Name = "FireLight"
     fireLight.Brightness = 10
     fireLight.Range = 20
     fireLight.Color = Color3.new(1, 0.6, 0.3)
+    
+    -- Fire crackling sound
+    local fireSound = Instance.new("Sound", firePit)
+    fireSound.Name = "FireSound"
+    fireSound.SoundId = "rbxassetid://130976108"
+    fireSound.Looped = true
+    fireSound.Volume = 0.5
+    fireSound:Play()
     
     -- Log seats around fire
     for i = 1, 4 do
         local angle = (i-1) * math.pi/2
         local log = Instance.new("Part", safeZoneFolder)
+        log.Name = "LogSeat"..i
         log.Size = Vector3.new(6, 1.5, 1.5)
         log.Position = firePit.Position + Vector3.new(math.cos(angle)*8, 0.75, math.sin(angle)*8)
         log.Anchored = true
@@ -1656,6 +1724,7 @@ local function createSafeZone()
     
     -- Sleeping area
     local bed = Instance.new("Part", safeZoneFolder)
+    bed.Name = "Bed"
     bed.Size = Vector3.new(10, 2, 6)
     bed.Position = platform.Position + Vector3.new(20, 1, 0)
     bed.Anchored = true
@@ -1665,6 +1734,7 @@ local function createSafeZone()
     
     -- Pillow
     local pillow = Instance.new("Part", safeZoneFolder)
+    pillow.Name = "Pillow"
     pillow.Size = Vector3.new(3, 1, 2)
     pillow.Position = bed.Position + Vector3.new(3.5, 1.5, 0)
     pillow.Anchored = true
@@ -1674,6 +1744,7 @@ local function createSafeZone()
     
     -- Blanket
     local blanket = Instance.new("Part", safeZoneFolder)
+    blanket.Name = "Blanket"
     blanket.Size = Vector3.new(8, 0.5, 5)
     blanket.Position = bed.Position + Vector3.new(0, 1.25, 0)
     blanket.Anchored = true
@@ -1683,6 +1754,7 @@ local function createSafeZone()
     
     -- Storage chest
     local chest = Instance.new("Part", safeZoneFolder)
+    chest.Name = "StorageChest"
     chest.Size = Vector3.new(6, 4, 4)
     chest.Position = platform.Position + Vector3.new(-20, 2, 0)
     chest.Anchored = true
@@ -1692,6 +1764,7 @@ local function createSafeZone()
     
     -- Chest lid
     local chestLid = Instance.new("Part", safeZoneFolder)
+    chestLid.Name = "ChestLid"
     chestLid.Size = Vector3.new(6, 0.5, 4)
     chestLid.Position = chest.Position + Vector3.new(0, 2.25, 2)
     chestLid.Anchored = true
@@ -1702,6 +1775,7 @@ local function createSafeZone()
     
     -- Chest lock
     local chestLock = Instance.new("Part", safeZoneFolder)
+    chestLock.Name = "ChestLock"
     chestLock.Size = Vector3.new(1, 1, 0.5)
     chestLock.Position = chest.Position + Vector3.new(0, 1, 2)
     chestLock.Anchored = true
@@ -1711,6 +1785,7 @@ local function createSafeZone()
     
     -- Weapon rack
     local weaponRack = Instance.new("Part", safeZoneFolder)
+    weaponRack.Name = "WeaponRack"
     weaponRack.Size = Vector3.new(8, 6, 1)
     weaponRack.Position = platform.Position + Vector3.new(0, 3, 20)
     weaponRack.Anchored = true
@@ -1721,6 +1796,7 @@ local function createSafeZone()
     -- Weapon rack hooks
     for i = -1, 1, 0.5 do
         local hook = Instance.new("Part", safeZoneFolder)
+        hook.Name = "WeaponHook"
         hook.Size = Vector3.new(0.5, 0.5, 1)
         hook.Position = weaponRack.Position + Vector3.new(i*6, 0, 0.5)
         hook.Anchored = true
@@ -1731,106 +1807,13 @@ local function createSafeZone()
     
     -- Fake weapons on rack
     local sword = Instance.new("Part", safeZoneFolder)
+    sword.Name = "Sword"
     sword.Size = Vector3.new(0.5, 5, 0.5)
     sword.Position = weaponRack.Position + Vector3.new(0, 0, 1)
     sword.Anchored = true
     sword.CanCollide = true
     sword.Material = Enum.Material.Metal
     sword.Color = Color3.fromRGB(200, 200, 200)
-    
-    -- Natural environment outside
-    -- Trees
-    local treeTypes = {
-        {trunkColor = Color3.fromRGB(101, 67, 33), leavesColor = Color3.fromRGB(34, 139, 34)},
-        {trunkColor = Color3.fromRGB(120, 80, 50), leavesColor = Color3.fromRGB(0, 100, 0)},
-        {trunkColor = Color3.fromRGB(80, 50, 20), leavesColor = Color3.fromRGB(50, 205, 50)}
-    }
-    
-    for i = 1, 20 do
-        local treeType = treeTypes[math.random(1, #treeTypes)]
-        local treePos = platform.Position + Vector3.new(
-            math.random(-100, 100),
-            0,
-            math.random(-100, 100)
-        ) + Vector3.new(0, terrain:GetHeight(treePos.X, treePos.Z) - 5000, 0)
-        
-        -- Tree trunk
-        local trunkHeight = math.random(10, 20)
-        local trunk = Instance.new("Part", safeZoneFolder)
-        trunk.Size = Vector3.new(math.random(3, 5), trunkHeight, math.random(3, 5))
-        trunk.Position = treePos + Vector3.new(0, trunkHeight/2, 0)
-        trunk.Anchored = true
-        trunk.CanCollide = true
-        trunk.Material = Enum.Material.Wood
-        trunk.Color = treeType.trunkColor
-        
-        -- Tree leaves (multiple parts for more realism)
-        for j = 1, 3 do
-            local leaves = Instance.new("Part", safeZoneFolder)
-            leaves.Size = Vector3.new(
-                math.random(8, 12),
-                math.random(4, 6),
-                math.random(8, 12)
-            )
-            leaves.Position = trunk.Position + Vector3.new(
-                0,
-                trunkHeight/2 + math.random(4, 8),
-                0
-            )
-            leaves.Anchored = true
-            leaves.CanCollide = true
-            leaves.Material = Enum.Material.Grass
-            leaves.Color = treeType.leavesColor
-            leaves.Shape = Enum.PartType.Ball
-        end
-    end
-    
-    -- Bushes
-    for i = 1, 30 do
-        local bushPos = platform.Position + Vector3.new(
-            math.random(-100, 100),
-            0,
-            math.random(-100, 100)
-        ) + Vector3.new(0, terrain:GetHeight(bushPos.X, bushPos.Z) - 5000, 0)
-        
-        local bush = Instance.new("Part", safeZoneFolder)
-        bush.Size = Vector3.new(
-            math.random(5, 8),
-            math.random(3, 5),
-            math.random(5, 8)
-        )
-        bush.Position = bushPos + Vector3.new(0, bush.Size.Y/2, 0)
-        bush.Anchored = true
-        bush.CanCollide = true
-        bush.Material = Enum.Material.Grass
-        bush.Color = Color3.fromRGB(0, math.random(100, 150), 0)
-        bush.Shape = Enum.PartType.Ball
-    end
-    
-    -- Rocks
-    for i = 1, 15 do
-        local rockPos = platform.Position + Vector3.new(
-            math.random(-100, 100),
-            0,
-            math.random(-100, 100)
-        ) + Vector3.new(0, terrain:GetHeight(rockPos.X, rockPos.Z) - 5000, 0)
-        
-        local rock = Instance.new("Part", safeZoneFolder)
-        rock.Size = Vector3.new(
-            math.random(3, 6),
-            math.random(1, 3),
-            math.random(3, 6)
-        )
-        rock.Position = rockPos + Vector3.new(0, rock.Size.Y/2, 0)
-        rock.Anchored = true
-        rock.CanCollide = true
-        rock.Material = Enum.Material.Slate
-        rock.Color = Color3.fromRGB(
-            math.random(80, 120),
-            math.random(80, 120),
-            math.random(80, 120)
-        )
-    end
     
     -- Ambient lighting
     local lighting = game:GetService("Lighting")
@@ -1842,18 +1825,24 @@ local function createSafeZone()
             Brightness = lighting.Brightness,
             ColorShift_Bottom = lighting.ColorShift_Bottom,
             ColorShift_Top = lighting.ColorShift_Top,
-            OutdoorAmbient = lighting.OutdoorAmbient
+            OutdoorAmbient = lighting.OutdoorAmbient,
+            FogColor = lighting.FogColor,
+            FogEnd = lighting.FogEnd,
+            FogStart = lighting.FogStart
         }
     end
     
-    -- Set safezone lighting
+    -- Set safezone lighting (sunset effect)
     lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
     lighting.Brightness = 2
     lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
     lighting.ColorShift_Top = Color3.new(0, 0, 0)
     lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+    lighting.FogColor = Color3.new(0.8, 0.7, 0.5)
+    lighting.FogEnd = 1000
+    lighting.FogStart = 500
     
-    -- Skybox
+    -- Skybox (sunset)
     local skybox = Instance.new("Sky", safeZoneFolder)
     skybox.SkyboxBk = "rbxassetid://6016555593"
     skybox.SkyboxDn = "rbxassetid://6016555593"
@@ -1861,42 +1850,118 @@ local function createSafeZone()
     skybox.SkyboxLf = "rbxassetid://6016555593"
     skybox.SkyboxRt = "rbxassetid://6016555593"
     skybox.SkyboxUp = "rbxassetid://6016555593"
+    skybox.CelestialBodiesShown = true
+    skybox.SunAngularSize = 21
     
-    -- Sound effects
+    -- Ambient nature sounds
     local ambientSound = Instance.new("Sound", safeZoneFolder)
+    ambientSound.Name = "AmbientNatureSound"
     ambientSound.SoundId = "rbxassetid://130976108" -- Forest ambient sound
     ambientSound.Looped = true
     ambientSound.Volume = 0.5
     ambientSound:Play()
     
+    -- Birds chirping sounds (random intervals)
+    local birdsSound = Instance.new("Sound", safeZoneFolder)
+    birdsSound.Name = "BirdsChirping"
+    birdsSound.SoundId = "rbxassetid://130976108"
+    birdsSound.Looped = false
+    birdsSound.Volume = 0.3
+    
+    -- Function to play birds at random intervals
+    local function playBirds()
+        while safeZoneFolder and safeZoneFolder.Parent do
+            birdsSound:Play()
+            task.wait(math.random(10, 30))
+        end
+    end
+    
+    -- Start bird sounds
+    task.spawn(playBirds)
+    
+    -- Wind sound
+    local windSound = Instance.new("Sound", safeZoneFolder)
+    windSound.Name = "WindSound"
+    windSound.SoundId = "rbxassetid://130976108"
+    windSound.Looped = true
+    windSound.Volume = 0.2
+    windSound:Play()
+    
     -- Spawn position (on platform near door)
     return platform.Position + Vector3.new(0, 5, -25)
 end
 
+-- Updated Teleport to SafeZone Button
 Misc:Button({
     Title = "Teleport to SafeZone",
     Desc = "Teleports you to a safezone",
     Callback = function()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") then
+            -- Store last position
             lastPosition = character.HumanoidRootPart.CFrame
+            
+            -- Create safezone and get spawn position
             local safeZonePos = createSafeZone()
+            
+            -- Teleport player
             character.HumanoidRootPart.CFrame = CFrame.new(safeZonePos)
+            
+            -- Notify player
+            WindUI:Notify({
+                Title = "SafeZone",
+                Desc = "You've been teleported to a safezone",
+                Duration = 5
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Desc = "Character not found or HumanoidRootPart missing",
+                Duration = 5,
+                Variant = "Error"
+            })
         end
     end
 })
 
+-- Updated Teleport Back Button
 Misc:Button({
     Title = "Teleport Back",
-    Desc = "Returns you to where you were",
+    Desc = "Returns you to where you were before safezone",
     Callback = function()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") and lastPosition then
+            -- Teleport back
             character.HumanoidRootPart.CFrame = lastPosition
+            
+            -- Clean up safezone
             if safeZoneFolder then
+                -- Restore original lighting
+                local lighting = game:GetService("Lighting")
+                if getgenv().originalLighting then
+                    for property, value in pairs(getgenv().originalLighting) do
+                        lighting[property] = value
+                    end
+                end
+                
+                -- Destroy safezone
                 safeZoneFolder:Destroy()
                 safeZoneFolder = nil
             end
+            
+            -- Notify player
+            WindUI:Notify({
+                Title = "SafeZone",
+                Desc = "You've been teleported back",
+                Duration = 5
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Desc = "No position stored or character issue",
+                Duration = 5,
+                Variant = "Error"
+            })
         end
     end
 })
