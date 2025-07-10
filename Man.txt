@@ -1,0 +1,2082 @@
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+
+-- Safer default values
+local aimbotLerpFactor = 0.3
+local flingPower = 2500
+local movel = 0.05
+local hiddenfling = false
+local glassESPEnabled = false
+local glassESPConnections = {}
+local safeGlassHighlights = {}
+
+local Window = WindUI:CreateWindow({
+    Title = "Agsy | Ink Game V2.3",
+    Icon = "rbxassetid://122545428580310",
+    IconThemed = true,
+    Author = "Agsy",
+    Folder = "InkGameAgsy",
+    Size = UDim2.fromOffset(580, 380),
+    Transparent = true,
+    Theme = "Red",
+    SideBarWidth = 200,
+})
+
+Window:SetBackgroundImage("rbxassetid://122545428580310")
+Window:SetBackgroundImageTransparency(0.6)
+Window:DisableTopbarButtons({"Fullscreen"})
+
+Window:EditOpenButton({
+    Title = "Agsy | Ink Game V2.3",
+    Icon = "slice",
+    CornerRadius = UDim.new(0, 16),
+    StrokeThickness = 2,
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 102, 102)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
+    }),
+    Enabled = true,
+    Draggable = true,
+})
+
+MainSection = Window:Section({
+    Title = "Main",
+    Opened = true,
+})
+
+local Discord = MainSection:Tab({
+    Title = "Important",
+    Icon = "bell",
+    ShowTabTitle = true,
+})
+
+local UpdateLogs = MainSection:Tab({
+    Title = "Update Logs",
+    Icon = "clipboard",
+    ShowTabTitle = true,
+})
+
+UpdateLogs:Paragraph({
+    Title = "Changelogs V2.3",
+    Desc = "[+] Added Misc Tab\n[+] Added Disable Injuries\n[+] Added Disable Stub\n[+] Added Noclip\n[+] Added Auto Kill in Lights Out Section (Win Tab)",
+    Image = "rbxassetid://122545428580310",
+})
+
+GameSection = Window:Section({
+    Title = "Game",
+    Opened = true,
+})
+
+local Main = GameSection:Tab({
+    Title = "Win",
+    Icon = "star",
+    ShowTabTitle = true,
+})
+
+local Utility = GameSection:Tab({
+    Title = "Utility",
+    Icon = "settings",
+    ShowTabTitle = true,
+})
+
+local Misc = GameSection:Tab({
+    Title = "Misc",
+    Icon = "cctv",
+    ShowTabTitle = true,
+})
+
+local Combat = GameSection:Tab({
+    Title = "Combat",
+    Icon = "crosshair",
+    ShowTabTitle = true,
+})
+
+local Visual = GameSection:Tab({
+    Title = "Visual",
+    Icon = "eye",
+    ShowTabTitle = true,
+    Locked = true
+})
+
+-- Automatic Anti-Ban for Teleporting (exact implementation as requested)
+local originalNamecall
+local LastPosition
+
+local function enablePositionFreeze()
+    -- Store original metatable function
+    local rawmt = getrawmetatable(game)
+    setreadonly(rawmt, false)
+    originalNamecall = rawmt.__namecall
+    
+    -- Continuously update last position
+    game:GetService("RunService").Heartbeat:Connect(function()
+        local char = game.Players.LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            LastPosition = char.HumanoidRootPart.CFrame
+        end
+    end)
+
+    -- The hook that freezes position
+    rawmt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+
+        if method == "FireServer" 
+           and self.Name == "rootCFrame" 
+           and self.ClassName == "RemoteEvent" 
+           and LastPosition then
+            args[1] = LastPosition  -- Always send last recorded position
+            return originalNamecall(self, unpack(args))
+        end
+        
+        return originalNamecall(self, ...)
+    end)
+end
+
+-- Activate the position freeze immediately
+enablePositionFreeze()
+
+-- Safer fling implementation
+local function fling()
+    local lp = Players.LocalPlayer
+    local character = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    
+    while hiddenfling do
+        RunService.Heartbeat:Wait()
+        if hiddenfling then
+            local originalVelocity = hrp.Velocity
+            hrp.Velocity = originalVelocity * 1.5 + Vector3.new(0, flingPower, 0)
+            RunService.RenderStepped:Wait()
+            hrp.Velocity = originalVelocity * 0.8
+            RunService.Stepped:Wait()
+            hrp.Velocity = originalVelocity + Vector3.new(0, movel, 0)
+            movel = -movel
+        end
+    end
+end
+
+local function getClosestNPC()
+    local closestNPC = nil
+    local closestDistance = math.huge
+    local character = Players.LocalPlayer.Character
+
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+
+    local playerPos = character.HumanoidRootPart.Position
+    local targetPatterns = {"guard", "squid", "triangle", "square"}
+
+    for _, model in ipairs(workspace.Live:GetChildren()) do
+        if model:IsA("Model") then
+            local modelName = model.Name:lower()
+            local isTarget = false
+
+            for _, pattern in ipairs(targetPatterns) do
+                if modelName:find(pattern) then
+                    isTarget = true
+                    break
+                end
+            end
+
+            if isTarget then
+                local hrp = model:FindFirstChild("HumanoidRootPart")
+                local humanoid = model:FindFirstChildOfClass("Humanoid")
+
+                if hrp and humanoid and humanoid.Health > 0 then
+                    local distance = (hrp.Position - playerPos).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestNPC = model
+                    end
+                end
+            end
+        end
+    end
+    return closestNPC
+end
+
+local function aimbotRebel()
+    local closestNPC = getClosestNPC()
+    if closestNPC then
+        local targetPart = closestNPC:FindFirstChild("Head") or closestNPC:FindFirstChild("HumanoidRootPart")
+        if targetPart then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+        end
+    end
+end
+
+local function CopyDiscordInvite()
+    setclipboard("https://discord.gg/agsy")
+end
+
+Discord:Paragraph({
+    Title = "Join Discord To Know Updates!",
+    Desc = "Stay updated with the latest features and fixes",
+    Image = "rbxassetid://122545428580310",
+    Thumbnail = "rbxassetid://122545428580310",
+    Buttons = {
+        {
+            Title = "Copy Invite",
+            Icon = "clipboard",
+            Callback = CopyDiscordInvite,
+            Variant = "Primary"
+        },
+        {
+            Title = "Visit YouTube",
+            Icon = "youtube",
+            Callback = function() 
+                setclipboard("https://www.youtube.com/@incrediblebread")
+            end,
+            Variant = "Secondary"
+        }
+    }
+})
+
+local antiBanActive = false
+
+Discord:Button({
+    Title = "Anti Ban",
+    Callback = function()
+        if antiBanActive then return end
+        
+        -- Initialize anti-ban protection
+        local rawmt = getrawmetatable(game)
+        setreadonly(rawmt, false)
+        
+        -- Backup original methods
+        local originalNamecall = rawmt.__namecall
+        local originalIndex = rawmt.__index
+        local originalNewIndex = rawmt.__newindex
+        
+        -- Namecall hook
+        rawmt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            
+            -- Prevent certain remote calls from being detected
+            if method == "FireServer" or method == "InvokeServer" then
+                -- Whitelist safe remotes
+                local remoteName = tostring(self)
+                if remoteName:find("Dialogue") or remoteName:find("Effect") then
+                    return originalNamecall(self, ...)
+                end
+                
+                -- Delay and randomize calls to avoid detection
+                task.wait(math.random() * 0.1)
+            end
+            
+            return originalNamecall(self, ...)
+        end)
+        
+        -- Index hook
+        rawmt.__index = newcclosure(function(t, k)
+            -- Prevent detection of certain property checks
+            if tostring(k) == "WalkSpeed" or tostring(k) == "JumpPower" then
+                return originalIndex(t, k)
+            end
+            return originalIndex(t, k)
+        end)
+        
+        -- Newindex hook
+        rawmt.__newindex = newcclosure(function(t, k, v)
+            -- Prevent modification of certain properties from being detected
+            if tostring(k) == "WalkSpeed" or tostring(k) == "JumpPower" then
+                -- Allow modification but with slight randomization
+                if math.random() > 0.5 then
+                    task.wait(math.random() * 0.05)
+                end
+                return originalNewIndex(t, k, v)
+            end
+            return originalNewIndex(t, k, v)
+        end)
+        
+        setreadonly(rawmt, true)
+        antiBanActive = true
+        
+    end
+})
+
+-- Game Tab
+Main:Section({Title = "OP"})
+Main:Divider()
+
+Main:Toggle({
+    Title = "Touch Fling",
+    Desc = "Fling anyone who touches you",
+    Value = false,
+    Callback = function(state)
+        hiddenfling = state
+        if state then
+            coroutine.wrap(fling)()
+        end
+    end
+})
+
+local antiFlingEnabled = false
+local antiFlingConnection
+Main:Toggle({
+    Title = "Anti-Fling",
+    Desc = "Stops other players from flinging you",
+    Value = false,
+    Callback = function(state)
+        antiFlingEnabled = state
+        if state then
+            antiFlingConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local character = LocalPlayer.Character
+                    if character then
+                        local hrp = character:FindFirstChild("HumanoidRootPart")
+                        local humanoid = character:FindFirstChildOfClass("Humanoid")
+                        
+                        if hrp and humanoid then
+                            -- Only reduce horizontal velocity (x and z), preserve vertical (y) for jumping
+                            local currentVel = hrp.Velocity
+                            hrp.Velocity = Vector3.new(currentVel.X * 0.5, currentVel.Y, currentVel.Z * 0.5)
+                            hrp.RotVelocity = Vector3.new(0, 0, 0)
+                            
+                            -- Additional check to prevent excessive velocity while still allowing jumps
+                            if currentVel.Magnitude > 100 and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+                                hrp.Velocity = Vector3.new(currentVel.X * 0.3, currentVel.Y, currentVel.Z * 0.3)
+                            end
+                        end
+                    end
+                end)
+            end)
+        else
+            if antiFlingConnection then
+                antiFlingConnection:Disconnect()
+                antiFlingConnection = nil
+            end
+        end
+    end
+})
+
+-- Red Light Green Light Section
+Main:Section({Title = "Red Light Green Light"})
+Main:Divider()
+Main:Button({
+    Title = "Complete Red Light Green Light",
+    Callback = function()
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.CFrame = CFrame.new(-46, 1024, 110)
+        end
+    end
+})
+
+local rlglGodModeEnabled = false
+local rlglModule = {
+    _IsGreenLight = false,
+    _LastRootPartCFrame = nil,
+    _OriginalNamecall = nil,
+    _Connection = nil
+}
+
+function rlglModule:Start()
+    local Client = Players.LocalPlayer
+    local TrafficLightImage = Client.PlayerGui:WaitForChild("ImpactFrames"):WaitForChild("TrafficLightEmpty")
+
+    self._IsGreenLight = TrafficLightImage.Image == ReplicatedStorage.Effects.Images.TrafficLights.GreenLight.Image
+
+    local RootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
+    self._LastRootPartCFrame = RootPart and RootPart.CFrame
+    
+    self._Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(EffectsData)
+        if EffectsData.EffectName ~= "TrafficLight" then return end
+        self._IsGreenLight = EffectsData.GreenLight == true
+        local RootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
+        self._LastRootPartCFrame = RootPart and RootPart.CFrame
+    end)
+
+    local rawmt = getrawmetatable(game)
+    setreadonly(rawmt, false)
+    self._OriginalNamecall = rawmt.__namecall
+    
+    rawmt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+
+        if method == "FireServer" and self.ClassName == "RemoteEvent" and self.Name == "rootCFrame" then
+            if rlglModule._IsGreenLight == false and rlglModule._LastRootPartCFrame then
+                args[1] = rlglModule._LastRootPartCFrame
+                return rlglModule._OriginalNamecall(self, unpack(args))
+            end
+        end
+
+        return rlglModule._OriginalNamecall(self, ...)
+    end)
+end
+
+function rlglModule:Stop()
+    if self._Connection then
+        self._Connection:Disconnect()
+        self._Connection = nil
+    end
+    
+    if self._OriginalNamecall then
+        local rawmt = getrawmetatable(game)
+        setreadonly(rawmt, false)
+        rawmt.__namecall = self._OriginalNamecall
+        setreadonly(rawmt, true)
+        self._OriginalNamecall = nil
+    end
+    
+    self._IsGreenLight = false
+    self._LastRootPartCFrame = nil
+end
+
+Main:Toggle({
+    Title = "Red Light Green Light God Mode (Not Working Rn)",
+    Desc = "Prevents detection during red light",
+    Value = false,
+    Callback = function(state)
+        rlglGodModeEnabled = state
+        if state then
+            rlglModule:Start()
+        else
+            rlglModule:Stop()
+        end
+    end
+})
+
+-- Glass Bridge Section
+Main:Section({Title = "Glass Bridge"})
+Main:Divider()
+Main:Toggle({
+    Title = "Reveal Safe Glass",
+    Desc = "Colors safe glass panels green and trap panels red",
+    Value = false,
+    Callback = function(state)
+        glassESPEnabled = state
+        if state then
+            pcall(function()
+                local GlassHolder = workspace:WaitForChild("GlassBridge"):WaitForChild("GlassHolder")
+                for _, PanelPair in ipairs(GlassHolder:GetChildren()) do
+                    for _, Panel in ipairs(PanelPair:GetChildren()) do
+                        local GlassPart = Panel:WaitForChild("glasspart")
+                        local isTrap = GlassPart:GetAttribute("exploitingisevil")
+                        
+                        if not GlassPart:GetAttribute("OriginalColor") then
+                            GlassPart:SetAttribute("OriginalColor", GlassPart.Color)
+                            GlassPart:SetAttribute("OriginalTransparency", GlassPart.Transparency)
+                            GlassPart:SetAttribute("OriginalMaterial", GlassPart.Material)
+                        end
+                        
+                        GlassPart.Color = isTrap and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
+                        GlassPart.Transparency = isTrap and 0.4 or 0.6
+                        GlassPart.Material = Enum.Material.Glass
+                    end
+                end
+            end)
+        else
+            pcall(function()
+                local GlassBridge = workspace:FindFirstChild("GlassBridge")
+                if GlassBridge then
+                    local GlassHolder = GlassBridge:FindFirstChild("GlassHolder")
+                    if GlassHolder then
+                        for _, PanelPair in ipairs(GlassHolder:GetChildren()) do
+                            for _, Panel in ipairs(PanelPair:GetChildren()) do
+                                local GlassPart = Panel:FindFirstChild("glasspart")
+                                if GlassPart and GlassPart:GetAttribute("OriginalColor") then
+                                    GlassPart.Color = GlassPart:GetAttribute("OriginalColor")
+                                    GlassPart.Transparency = GlassPart:GetAttribute("OriginalTransparency")
+                                    GlassPart.Material = GlassPart:GetAttribute("OriginalMaterial")
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
+Main:Section({Title = "Mingle"})
+Main:Divider()
+
+local autoChokeholdEnabled = false
+local chokeholdConnections = {}
+
+local function SetupMingleAuto(Character)
+    local RemoteForQTE = Character:WaitForChild("RemoteForQTE", 5)
+    if not RemoteForQTE then return end
+
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not autoChokeholdEnabled or not RemoteForQTE or not RemoteForQTE.Parent then
+            if connection then connection:Disconnect() end
+            return
+        end
+        RemoteForQTE:FireServer() -- Spams the QTE event to auto-complete
+    end)
+    
+    table.insert(chokeholdConnections, connection)
+end
+
+Main:Toggle({
+    Title = "Auto ChokeHold",
+    Desc = "Automatically completes chokehold QTEs in Mingle game",
+    Value = false,
+    Callback = function(state)
+        autoChokeholdEnabled = state
+        
+        if state then
+            -- Setup for current character if exists
+            local currentChar = LocalPlayer.Character
+            if currentChar then
+                task.spawn(function()
+                    SetupMingleAuto(currentChar)
+                end)
+            end
+            
+            -- Setup for future characters
+            chokeholdConnections.characterAdded = LocalPlayer.CharacterAdded:Connect(function(Character)
+                SetupMingleAuto(Character)
+            end)
+        else
+            -- Clean up all connections
+            for _, conn in pairs(chokeholdConnections) do
+                if typeof(conn) == "RBXScriptConnection" then
+                    conn:Disconnect()
+                end
+            end
+            chokeholdConnections = {}
+        end
+    end
+})
+
+-- Dalgona Section
+Main:Section({Title = "Dalgona"})
+Main:Divider()
+
+local function CompleteDalgona()
+    local DalgonaClientModule = game.ReplicatedStorage.Modules.Games.DalgonaClient
+
+    for _, Value in ipairs(getreg()) do
+        if typeof(Value) == "function" and islclosure(Value) then
+            if getfenv(Value).script == DalgonaClientModule then
+                if debug.getinfo(Value).nups == 73 then
+                    setupvalue(Value, 31, 9e9) -- Sets the successful clicks to a huge number
+                    break
+                end
+            end
+        end
+    end
+end
+
+Main:Button({
+    Title = "Complete Dalgona",
+    Desc = "Instantly completes the Dalgona",
+    Locked = false,
+    Callback = CompleteDalgona
+})
+
+Main:Section({Title = "Lights Out"})
+Main:Divider()
+
+local autoKillEnabled = false
+local autoKillConnection
+local currentTarget = nil
+
+Main:Toggle({
+    Title = "Auto Kill",
+    Desc = "Automatically kills players",
+    Value = false,
+    Callback = function(state)
+        autoKillEnabled = state
+        if state then
+            -- Start auto kill
+            autoKillConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local player = Players.LocalPlayer
+                    local character = player.Character
+                    if not character then return end
+                    
+                    -- Check backpack for weapons
+                    local backpack = player:FindFirstChild("Backpack")
+                    local tool = nil
+                    
+                    if backpack then
+                        for _, item in ipairs(backpack:GetChildren()) do
+                            if item:IsA("Tool") then
+                                local itemName = item.Name:lower()
+                                if itemName:find("fork") or itemName:find("bottle") then
+                                    tool = item
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Equip tool if found
+                    if tool and not character:FindFirstChild(tool.Name) then
+                        tool.Parent = character
+                    end
+                    
+                    -- Find a target if none or current target is dead
+                    if not currentTarget or not currentTarget.Character or 
+                       (currentTarget.Character:FindFirstChildOfClass("Humanoid") and 
+                        currentTarget.Character:FindFirstChildOfClass("Humanoid").Health <= 0) then
+                        
+                        -- Find new target
+                        local closestDistance = math.huge
+                        for _, target in ipairs(Players:GetPlayers()) do
+                            if target ~= player and target.Character and 
+                               target.Character:FindFirstChild("HumanoidRootPart") and
+                               target.Character:FindFirstChildOfClass("Humanoid") and
+                               target.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+                                
+                                local distance = (target.Character.HumanoidRootPart.Position - 
+                                                character.HumanoidRootPart.Position).Magnitude
+                                if distance < closestDistance then
+                                    closestDistance = distance
+                                    currentTarget = target
+                                end
+                            end
+                        end
+                    end
+                    
+                    -- Attack current target
+                    if currentTarget and currentTarget.Character and 
+                       currentTarget.Character:FindFirstChild("HumanoidRootPart") then
+                        
+                        -- Teleport to target
+                        character.HumanoidRootPart.CFrame = currentTarget.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+                        
+                        -- Attack
+                        local args = {
+                            "Clicked"
+                        }
+                        game:GetService("ReplicatedStorage"):WaitForChild("Replication"):WaitForChild("Event"):FireServer(unpack(args))
+                        
+                        -- Small delay between attacks
+                        task.wait(0.2)
+                    end
+                end)
+            end)
+        else
+            -- Stop auto kill
+            if autoKillConnection then
+                autoKillConnection:Disconnect()
+                autoKillConnection = nil
+            end
+            currentTarget = nil
+        end
+    end
+})
+
+-- Hide and Seek Section
+Main:Section({Title = "Hide and Seek"})
+Main:Divider()
+
+-- Improved Infinite Stamina Toggle
+local infiniteStaminaEnabled = false
+local staminaConnection
+
+Main:Toggle({
+    Title = "Infinite Stamina",
+    Desc = "Keeps your stamina at maximum",
+    Value = false,
+    Callback = function(state)
+        infiniteStaminaEnabled = state
+        if state then
+            -- More efficient stamina update using Heartbeat
+            staminaConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Check both possible locations for stamina value
+                    local playerFolder = workspace.Live:FindFirstChild(LocalPlayer.Name)
+                    local staminaVal = playerFolder and playerFolder:WaitForChild("StaminaVal")
+                    
+                    if not staminaVal then
+                        -- Alternative location check
+                        local character = LocalPlayer.Character
+                        if character then
+                            staminaVal = character:WaitForChild("StaminaVal")
+                        end
+                    end
+                    
+                    if staminaVal and staminaVal.Value < 100 then
+                        staminaVal.Value = 1000
+                    end
+                end)
+            end)
+            
+            -- Setup for when player respawns
+            workspace.Live.ChildAdded:Connect(function(child)
+                if child.Name == LocalPlayer.Name then
+                    -- Small delay to ensure StaminaVal exists
+                    task.wait(0.5)
+                    if infiniteStaminaEnabled then
+                        local staminaVal = child:WaitForChild("StaminaVal")
+                        if staminaVal then
+                            staminaVal.Value = 1000
+                        end
+                    end
+                end
+            end)
+        else
+            if staminaConnection then
+                staminaConnection:Disconnect()
+                staminaConnection = nil
+            end
+        end
+    end
+})
+
+-- ESP Settings
+local HidersESPEnabled = false  -- Separate toggle for Hiders
+local HuntersESPEnabled = false  -- Separate toggle for Hunters
+local HidersColor = Color3.fromRGB(0, 255, 230)  -- Cyan
+local HuntersColor = Color3.fromRGB(255, 0, 0)   -- Red
+local DefaultColor = Color3.fromRGB(255, 255, 0) -- Yellow (fallback)
+
+-- Store ESP highlights
+local ESPHighlights = {}
+
+-- Function to create/update ESP
+local function applyESP(object, role)
+    if not object or not object.Parent then return end
+
+    -- Skip if already highlighted
+    if ESPHighlights[object] then return end
+
+    -- Only apply if the corresponding toggle is enabled
+    if (role == "Hider" and not HidersESPEnabled) or (role == "Hunter" and not HuntersESPEnabled) then
+        return
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "HideAndSeekESP"
+    highlight.Adornee = object
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillTransparency = 0.7
+    highlight.OutlineTransparency = 0
+
+    if role == "Hider" then
+        highlight.FillColor = HidersColor
+        highlight.OutlineColor = HidersColor
+    elseif role == "Hunter" then
+        highlight.FillColor = HuntersColor
+        highlight.OutlineColor = HuntersColor
+    else
+        highlight.FillColor = DefaultColor
+        highlight.OutlineColor = DefaultColor
+    end
+
+    highlight.Parent = object
+    ESPHighlights[object] = highlight
+end
+
+-- Function to clear ESP
+local function clearESP()
+    for object, highlight in pairs(ESPHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(ESPHighlights)
+end
+
+-- Check attributes on an object
+local function checkAttributes(object)
+    if not object:IsA("BasePart") and not object:IsA("Model") then return end
+
+    if object:GetAttribute("IsHider") then
+        applyESP(object, "Hider")
+    elseif object:GetAttribute("IsHunter") then
+        applyESP(object, "Hunter")
+    end
+end
+
+-- Scan workspace for objects with attributes
+local function scanWorkspace()
+    for _, descendant in pairs(workspace:GetDescendants()) do
+        checkAttributes(descendant)
+    end
+end
+
+-- Handle players
+local function updatePlayers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == LocalPlayer then continue end
+
+        local character = player.Character
+        if character then
+            checkAttributes(character)
+        end
+
+        -- Track character changes
+        player.CharacterAdded:Connect(function(newChar)
+            checkAttributes(newChar)
+        end)
+    end
+end
+
+-- Listen for attribute changes in workspace
+local function setupWorkspaceTracking()
+    workspace.DescendantAdded:Connect(function(descendant)
+        if descendant:GetAttribute("IsHider") or descendant:GetAttribute("IsHunter") then
+            checkAttributes(descendant)
+        end
+    end)
+
+    for _, descendant in pairs(workspace:GetDescendants()) do
+        if descendant:GetAttribute("IsHider") or descendant:GetAttribute("IsHunter") then
+            checkAttributes(descendant)
+        end
+    end
+end
+
+-- Main update function
+local function updateESP()
+    clearESP()
+    if not HidersESPEnabled and not HuntersESPEnabled then return end
+
+    scanWorkspace()
+    updatePlayers()
+end
+
+-- Initialize
+Players.PlayerAdded:Connect(updateESP)
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateESP) -- Re-apply on respawn
+
+setupWorkspaceTracking()
+updateESP()
+
+-- Replace the old ESP toggle with two separate toggles
+Main:Toggle({
+    Title = "ESP Hiders",
+    Desc = "Highlights Hiders",
+    Value = false,
+    Callback = function(state)
+        HidersESPEnabled = state
+        updateESP()
+    end
+})
+
+Main:Toggle({
+    Title = "ESP Hunters",
+    Desc = "Highlights Hunters",
+    Value = false,
+    Callback = function(state)
+        HuntersESPEnabled = state
+        updateESP()
+    end
+})
+
+local exitDoorHighlights = {}
+local exitDoorESPEnabled = false
+
+local function updateExitDoorESP()
+    -- Clear existing highlights
+    for _, highlight in pairs(exitDoorHighlights) do
+        highlight:Destroy()
+    end
+    exitDoorHighlights = {}
+
+    if not exitDoorESPEnabled then return end
+
+    -- Safely find all exit doors in the HideAndSeekMap with WaitForChild
+    pcall(function()
+        local hideAndSeekMap = workspace:WaitForChild("HideAndSeekMap")
+        local newFixedDoors = hideAndSeekMap:WaitForChild("NEWFIXEDDOORS")
+
+        -- Search for floor folders (case insensitive)
+        for _, child in ipairs(newFixedDoors:GetChildren()) do
+            if string.find(string.lower(child.Name), "floor") then
+                local exitDoors = child:WaitForChild("EXITDOORS", 1) or child:FindFirstChild("EXITDOORS")
+                if exitDoors then
+                    -- Search for exit door models (case insensitive)
+                    for _, doorModel in ipairs(exitDoors:GetChildren()) do
+                        if string.find(string.lower(doorModel.Name), "exitdoor") then
+                            local doorPart = doorModel:FindFirstChildOfClass("BasePart") or doorModel:FindFirstChildWhichIsA("BasePart")
+                            if doorPart then
+                                local highlight = Instance.new("Highlight")
+                                highlight.Parent = doorPart
+                                highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
+                                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                                highlight.FillTransparency = 0.3
+                                highlight.OutlineTransparency = 0
+                                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                table.insert(exitDoorHighlights, highlight)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+Main:Toggle({
+    Title = "ESP Exit Doors",
+    Desc = "Highlights exit doors in Hide and Seek",
+    Value = false,
+    Callback = function(state)
+        exitDoorESPEnabled = state
+        if state then
+            -- Initial ESP update
+            updateExitDoorESP()
+            
+            -- Set up connections to update ESP when doors are added/removed
+            getgenv().exitDoorESPConnectionAdded = workspace.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("Model") and string.find(string.lower(descendant.Name), "exitdoor") then
+                    task.wait(0.5) -- Wait a bit to ensure the door is fully loaded
+                    updateExitDoorESP()
+                end
+            end)
+            
+            getgenv().exitDoorESPConnectionRemoved = workspace.DescendantRemoving:Connect(function(descendant)
+                if descendant:IsA("Model") and string.find(string.lower(descendant.Name), "exitdoor") then
+                    updateExitDoorESP()
+                end
+            end)
+        else
+            -- Clean up highlights and connections
+            for _, highlight in pairs(exitDoorHighlights) do
+                highlight:Destroy()
+            end
+            exitDoorHighlights = {}
+            
+            if getgenv().exitDoorESPConnectionAdded then
+                getgenv().exitDoorESPConnectionAdded:Disconnect()
+                getgenv().exitDoorESPConnectionAdded = nil
+            end
+            
+            if getgenv().exitDoorESPConnectionRemoved then
+                getgenv().exitDoorESPConnectionRemoved:Disconnect()
+                getgenv().exitDoorESPConnectionRemoved = nil
+            end
+        end
+    end
+})
+
+-- Tug of War Section
+Main:Section({Title = "Tug of War"})
+Main:Divider()
+
+local autoPullEnabled = false
+local autoPullConnection
+
+Main:Toggle({
+    Title = "Auto Pull Rope",
+    Desc = "Automatically pulls the rope with perfect timing",
+    Value = false,
+    Callback = function(state)
+        autoPullEnabled = state
+        if state then
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local TemporaryReachedBindableRemote = ReplicatedStorage.Remotes.TemporaryReachedBindable
+            local PULL_RATE = 0.025  -- Adjust speed if needed (lower = faster pulls)
+            local VALID_PULL_DATA = {["PerfectQTE"] = true}  -- Mimics a "perfect" pull
+
+            autoPullConnection = RunService.Heartbeat:Connect(function()
+                if autoPullEnabled then
+                    pcall(function()
+                        TemporaryReachedBindableRemote:FireServer(VALID_PULL_DATA)
+                        task.wait(PULL_RATE)
+                    end)
+                end
+            end)
+        else
+            if autoPullConnection then
+                autoPullConnection:Disconnect()
+                autoPullConnection = nil
+            end
+        end
+    end
+})
+
+-- Movement Section
+Main:Section({Title = "Movement"})
+Main:Divider()
+Main:Button({
+    Title = "Unlock Dash",
+    Desc = "Gives you Dash",
+    Callback = function()
+        pcall(function()
+            local boosts = game:GetService("Players").LocalPlayer:WaitForChild("Boosts")
+            if boosts:FindFirstChild("Faster Sprint") then
+                boosts["Faster Sprint"].Value = 5
+            end
+        end)
+    end
+})
+
+-- Combat Tab
+Combat:Section({Title = "Combat"})
+Combat:Divider()
+
+Combat:Button({
+    Title = "Kill All",
+    Desc = "Fling all players in the server",
+    Callback = function()
+        local Player = Players.LocalPlayer
+        local Character = Player.Character
+        local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+        local RootPart = Humanoid and Humanoid.RootPart
+        
+        if not Character or not Humanoid or not RootPart then return end
+        
+        local function SkidFling(TargetPlayer)
+            local TCharacter = TargetPlayer.Character
+            local THumanoid = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
+            local TRootPart = THumanoid and THumanoid.RootPart
+            local THead = TCharacter and TCharacter:FindFirstChild("Head")
+            local Accessory = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
+            local Handle = Accessory and Accessory:FindFirstChild("Handle")
+            
+            if RootPart.Velocity.Magnitude < 50 then
+                getgenv().OldPos = RootPart.CFrame
+            end
+            
+            if THead then
+                workspace.CurrentCamera.CameraSubject = THead
+            elseif not THead and Handle then
+                workspace.CurrentCamera.CameraSubject = Handle
+            elseif THumanoid and TRootPart then
+                workspace.CurrentCamera.CameraSubject = THumanoid
+            end
+            
+            if not TCharacter:FindFirstChildWhichIsA("BasePart") then
+                return
+            end
+            
+            local FPos = function(BasePart, Pos, Ang)
+                RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
+                Character:SetPrimaryPartCFrame(CFrame.new(BasePart.Position) * Pos * Ang)
+                RootPart.Velocity = Vector3.new(9e7, 9e7 * 10, 9e7)
+                RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+            end
+            
+            local SFBasePart = function(BasePart)
+                local TimeToWait = 2
+                local Time = tick()
+                local Angle = 0
+
+                repeat
+                    if RootPart and THumanoid then
+                        if BasePart.Velocity.Magnitude < 50 then
+                            Angle = Angle + 100
+
+                            FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle),0 ,0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(2.25, 1.5, -2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(-2.25, -1.5, 2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+                            task.wait()
+                        else
+                            FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, -THumanoid.WalkSpeed), CFrame.Angles(0, 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+                            task.wait()
+                            
+                            FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, -TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(0, 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(math.rad(90), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5 ,0), CFrame.Angles(math.rad(-90), 0, 0))
+                            task.wait()
+
+                            FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+                            task.wait()
+                        end
+                    else
+                        break
+                    end
+                until BasePart.Velocity.Magnitude > 500 or BasePart.Parent ~= TargetPlayer.Character or TargetPlayer.Parent ~= Players or not TargetPlayer.Character == TCharacter or THumanoid.Sit or Humanoid.Health <= 0 or tick() > Time + TimeToWait
+            end
+            
+            workspace.FallenPartsDestroyHeight = 0/0
+            
+            local BV = Instance.new("BodyVelocity")
+            BV.Name = "EpixVel"
+            BV.Parent = RootPart
+            BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+            BV.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+            
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+            
+            if TRootPart and THead then
+                if (TRootPart.CFrame.p - THead.CFrame.p).Magnitude > 5 then
+                    SFBasePart(THead)
+                else
+                    SFBasePart(TRootPart)
+                end
+            elseif TRootPart and not THead then
+                SFBasePart(TRootPart)
+            elseif not TRootPart and THead then
+                SFBasePart(THead)
+            elseif not TRootPart and not THead and Accessory and Handle then
+                SFBasePart(Handle)
+            end
+            
+            BV:Destroy()
+            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+            workspace.CurrentCamera.CameraSubject = Humanoid
+            
+            repeat
+                RootPart.CFrame = getgenv().OldPos * CFrame.new(0, .5, 0)
+                Character:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0, .5, 0))
+                Humanoid:ChangeState("GettingUp")
+                table.foreach(Character:GetChildren(), function(_, x)
+                    if x:IsA("BasePart") then
+                        x.Velocity, x.RotVelocity = Vector3.new(), Vector3.new()
+                    end
+                end)
+                task.wait()
+            until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+            workspace.FallenPartsDestroyHeight = getgenv().FPDH
+        end
+        
+        -- Flings all players except yourself
+        for _, target in ipairs(Players:GetPlayers()) do
+            if target ~= Player and target.Character then
+                SkidFling(target)
+            end
+        end
+    end
+})
+
+Combat:Section({Title = "Bannable Be Careful"})
+Combat:Divider()
+
+local bringGuardsEnabled = false
+local bringGuardsConnection
+Combat:Toggle({
+    Title = "Bring Guards",
+    Desc = "Brings Guards",
+    Value = false,
+    Callback = function(state)
+        bringGuardsEnabled = state
+        if state then
+            local lastUpdate = tick()
+            bringGuardsConnection = RunService.Heartbeat:Connect(function()
+                -- Add a 0.3 second delay between executions
+                if tick() - lastUpdate >= 0.3 then
+                    lastUpdate = tick()
+                    pcall(function()
+                        local player = game:GetService("Players").LocalPlayer
+                        local character = player.Character
+                        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                        
+                        if hrp then
+                            local offset = hrp.CFrame.lookVector * 5
+                            local targetPosition = hrp.Position + offset + Vector3.new(0, 3, 0)
+                            
+                            for _, obj in ipairs(workspace:GetDescendants()) do
+                                if obj:IsA("Model") then
+                                    local modelName = obj.Name:lower()
+                                    if modelName:find("triangle") or modelName:find("squid") or modelName:find("circle") or modelName:find("guard") then
+                                        local guardHrp = obj:FindFirstChild("HumanoidRootPart")
+                                        local humanoid = obj:FindFirstChildOfClass("Humanoid")
+                                        
+                                        if guardHrp and humanoid and humanoid.Health > 0 then
+                                            guardHrp.CFrame = guardHrp.CFrame:Lerp(CFrame.new(targetPosition), 0.1)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        else
+            if bringGuardsConnection then
+                bringGuardsConnection:Disconnect()
+                bringGuardsConnection = nil
+            end
+        end
+    end
+})
+
+Combat:Toggle({
+    Title = "Gun Mods",
+    Desc = "Improved bullets, reduced spread, faster fire",
+    Value = false,
+    Callback = function(state)
+        local MP5 = game:GetService("ReplicatedStorage").Weapons.Guns:FindFirstChild("MP5")
+        if MP5 then
+            if state then
+                if MP5:FindFirstChild("MaxBullets") then MP5.MaxBullets.Value = 5000 end
+                if MP5:FindFirstChild("Spread") then MP5.Spread.Value = 0 end
+                if MP5:FindFirstChild("BulletsPerFire") then MP5.BulletsPerFire.Value = 3 end
+                if MP5:FindFirstChild("FireRateCD") then MP5.FireRateCD.Value = 0 end
+            else
+                if MP5:FindFirstChild("MaxBullets") then MP5.MaxBullets.Value = 30 end
+                if MP5:FindFirstChild("Spread") then MP5.Spread.Value = 0.1 end
+                if MP5:FindFirstChild("BulletsPerFire") then MP5.BulletsPerFire.Value = 1 end
+                if MP5:FindFirstChild("FireRateCD") then MP5.FireRateCD.Value = 0.1 end
+            end
+        end
+    end
+})
+
+-- Utility Tab
+Utility:Section({Title = "Power"})
+Utility:Divider()
+-- Phantom Step Button
+Utility:Button({
+    Title = "Change to Phantom Step",
+    Desc = "Equips the Phantom Step power",
+    Callback = function()
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            player:SetAttribute("_EquippedPower", "PHANTOM STEP")
+        end)
+    end
+})
+
+-- Sharp Shooter Button
+Utility:Button({
+    Title = "Change to Sharp Shooter",
+    Desc = "Equips the Sharp Shooter power",
+    Callback = function()
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            player:SetAttribute("_EquippedPower", "Sharp Shooter")
+        end)
+    end
+})
+
+Utility:Section({Title = "Utilities"})
+Utility:Divider()
+Utility:Input({
+    Title = "Change Number Tag",
+    Desc = "Enter desired tag number (1-456)",
+    Default = "123",
+    Numeric = true,
+    Finished = false,
+    Callback = function(value)
+        getgenv().DESIRED_TAG = tonumber(value) or 123
+    end
+})
+
+Utility:Button({
+    Title = "Apply Number Tag",
+    Desc = "Click to apply the entered tag number",
+    Callback = function()
+        local DESIRED_TAG = getgenv().DESIRED_TAG or 123
+        if game.PlaceId == 125009265613167 then return end
+
+        -- SERVICES
+        local Players = game:GetService("Players")
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+        -- SETUP
+        local localPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+        local clickedButtonRemote = ReplicatedStorage.Remotes.ClickedButton
+        local args = {{buttonname = "leave"}}
+
+        -- CONFIG (using the same CFrame you provided)
+        local TARGET_CFRAME = CFrame.new(210.02560424804688, 55.94557189941406, -20.839000701904297)
+
+        -- OPTIMIZED FUNCTIONS
+        local function hasDesiredTag()
+            local tag = localPlayer:FindFirstChild("PlayerTagValue")
+            return tag and tag.Value == DESIRED_TAG
+        end
+
+        local function attemptTagChange()
+            local character = localPlayer.Character
+            if not character then return false end
+            
+            local humanoid = character:FindFirstChild("Humanoid")
+            if not humanoid then return false end
+            
+            -- Execute all actions in one frame with no delays
+            character:PivotTo(TARGET_CFRAME)
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            clickedButtonRemote:FireServer(unpack(args))
+            
+            return hasDesiredTag()
+        end
+
+        -- Create a connection only if one doesn't exist
+        if not getgenv().tagChangeConnection then
+            getgenv().tagChangeConnection = RunService.Heartbeat:Connect(function()
+                if not hasDesiredTag() then
+                    attemptTagChange()
+                else
+                    -- Disconnect when we get the desired tag
+                    if getgenv().tagChangeConnection then
+                        getgenv().tagChangeConnection:Disconnect()
+                        getgenv().tagChangeConnection = nil
+                    end
+                end
+            end)
+        end
+
+        -- Initial immediate attempt
+        attemptTagChange()
+    end
+})
+
+Utility:Button({
+    Title = "God Mode",
+    Desc = "In Progress (Fixing)",
+    Locked = true,
+})
+
+Utility:Toggle({
+    Title = "Auto Skip Cutscenes",
+    Desc = "Automatically skips all cutscenes and dialogue",
+    Value = false,
+    Callback = function(state)
+        if state then
+            getgenv().skipCutsceneConnection = RunService.Heartbeat:Connect(function()
+                
+                local args = {"Skipped"}
+                pcall(function()
+                    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("DialogueRemote"):FireServer(unpack(args))
+                end)
+            end)
+        else
+            if getgenv().skipCutsceneConnection then
+                getgenv().skipCutsceneConnection:Disconnect()
+                getgenv().skipCutsceneConnection = nil
+            end
+        end
+    end
+})
+
+local function onCharacterAdded(character)
+    if getgenv().currentWalkSpeed then
+        task.wait(1)
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = getgenv().currentWalkSpeed
+        end
+    end
+end
+
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+-- Misc
+Misc:Section({Title = "Safe"})
+Misc:Divider()
+local lastPosition = nil
+local safeZoneFolder = nil
+
+local function createSafeZone()
+    -- Delete existing safezone if it exists
+    if safeZoneFolder then
+        safeZoneFolder:Destroy()
+    end
+    
+    -- Create new safezone folder
+    safeZoneFolder = Instance.new("Folder", workspace)
+    safeZoneFolder.Name = "SAFEZONEMAP_ULTRA"
+    
+    -- Create terrain foundation
+    local terrain = Instance.new("Terrain", safeZoneFolder)
+    terrain.Name = "SafeTerrain"
+    
+    -- Generate natural terrain
+    local function generateTerrain()
+        local size = Vector3.new(512, 100, 512)
+        local position = Vector3.new(0, 5000, 0)
+        
+        -- Fill with base material (grass)
+        terrain:FillBlock(CFrame.new(position), size, Enum.Material.Grass)
+        
+        -- Add water in the center
+        local waterPosition = position + Vector3.new(0, 10, 0)
+        local waterSize = Vector3.new(100, 5, 100)
+        terrain:FillBlock(CFrame.new(waterPosition), waterSize, Enum.Material.Water)
+        
+        -- Add some hills
+        for i = 1, 5 do
+            local hillPos = position + Vector3.new(
+                math.random(-200, 200),
+                0,
+                math.random(-200, 200)
+            )
+            local hillSize = Vector3.new(
+                math.random(50, 100),
+                math.random(10, 30),
+                math.random(50, 100)
+            )
+            terrain:FillBlock(CFrame.new(hillPos), hillSize, Enum.Material.Grass)
+        end
+        
+        -- Add some rocky areas
+        for i = 1, 3 do
+            local rockPos = position + Vector3.new(
+                math.random(-200, 200),
+                0,
+                math.random(-200, 200)
+            )
+            local rockSize = Vector3.new(
+                math.random(30, 70),
+                math.random(5, 15),
+                math.random(30, 70)
+            )
+            terrain:FillBlock(CFrame.new(rockPos), rockSize, Enum.Material.Slate)
+        end
+        
+        -- Add a sandy beach around the water
+        local beachSize = Vector3.new(120, 5, 120)
+        terrain:FillBlock(CFrame.new(waterPosition), beachSize, Enum.Material.Sand)
+    end
+    
+    generateTerrain()
+    
+    -- Main safe area (wooden platform with amenities)
+    local platform = Instance.new("Part", safeZoneFolder)
+    platform.Name = "MainPlatform"
+    platform.Size = Vector3.new(60, 2, 60)
+    platform.Position = Vector3.new(0, 5000 + 30, 0) -- On top of terrain
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Material = Enum.Material.WoodPlanks
+    platform.Color = Color3.fromRGB(150, 100, 70)
+    
+    -- Add wooden border around platform
+    local border = Instance.new("Part", safeZoneFolder)
+    border.Size = Vector3.new(62, 1, 62)
+    border.Position = platform.Position + Vector3.new(0, 1, 0)
+    border.Anchored = true
+    border.CanCollide = true
+    border.Material = Enum.Material.Wood
+    border.Color = Color3.fromRGB(120, 80, 50)
+    
+    -- Protective walls with windows
+    local wallHeight = 15
+    local wallThickness = 2
+    
+    -- North wall with window
+    local northWall = Instance.new("Part", safeZoneFolder)
+    northWall.Size = Vector3.new(60 + wallThickness*2, wallHeight, wallThickness)
+    northWall.Position = platform.Position + Vector3.new(0, wallHeight/2, 30 + wallThickness/2)
+    northWall.Anchored = true
+    northWall.CanCollide = true
+    northWall.Material = Enum.Material.Wood
+    northWall.Color = Color3.fromRGB(120, 80, 50)
+    
+    -- Window in north wall
+    local northWindow = Instance.new("Part", safeZoneFolder)
+    northWindow.Size = Vector3.new(15, 8, 1)
+    northWindow.Position = northWall.Position + Vector3.new(0, 0, 0.5)
+    northWindow.Anchored = true
+    northWindow.CanCollide = false
+    northWindow.Transparency = 0.7
+    northWindow.Material = Enum.Material.Glass
+    northWindow.Color = Color3.fromRGB(200, 230, 255)
+    
+    -- South wall with door
+    local southWall1 = Instance.new("Part", safeZoneFolder)
+    southWall1.Size = Vector3.new(25, wallHeight, wallThickness)
+    southWall1.Position = platform.Position + Vector3.new(-17.5, wallHeight/2, -30 - wallThickness/2)
+    southWall1.Anchored = true
+    southWall1.CanCollide = true
+    southWall1.Material = northWall.Material
+    southWall1.Color = northWall.Color
+    
+    local southWall2 = southWall1:Clone()
+    southWall2.Position = platform.Position + Vector3.new(17.5, wallHeight/2, -30 - wallThickness/2)
+    southWall2.Parent = safeZoneFolder
+    
+    -- Wooden door
+    local door = Instance.new("Part", safeZoneFolder)
+    door.Name = "MainDoor"
+    door.Size = Vector3.new(10, 12, 1)
+    door.Position = platform.Position + Vector3.new(0, 6, -30)
+    door.Anchored = true
+    door.CanCollide = true
+    door.Material = Enum.Material.Wood
+    door.Color = Color3.fromRGB(100, 60, 30)
+    
+    -- Door handle
+    local handle = Instance.new("Part", safeZoneFolder)
+    handle.Size = Vector3.new(0.5, 0.5, 1)
+    handle.Position = door.Position + Vector3.new(4, 0, 0.5)
+    handle.Anchored = true
+    handle.CanCollide = true
+    handle.Material = Enum.Material.Metal
+    handle.Color = Color3.fromRGB(200, 200, 200)
+    
+    -- East wall with window
+    local eastWall = Instance.new("Part", safeZoneFolder)
+    eastWall.Size = Vector3.new(wallThickness, wallHeight, 60)
+    eastWall.Position = platform.Position + Vector3.new(30 + wallThickness/2, wallHeight/2, 0)
+    eastWall.Anchored = true
+    eastWall.CanCollide = true
+    eastWall.Material = northWall.Material
+    eastWall.Color = northWall.Color
+    
+    -- Window in east wall
+    local eastWindow = northWindow:Clone()
+    eastWindow.Position = eastWall.Position + Vector3.new(0.5, 0, 0)
+    eastWindow.Rotation = Vector3.new(0, 90, 0)
+    eastWindow.Parent = safeZoneFolder
+    
+    -- West wall with window
+    local westWall = eastWall:Clone()
+    westWall.Position = platform.Position + Vector3.new(-30 - wallThickness/2, wallHeight/2, 0)
+    westWall.Parent = safeZoneFolder
+    
+    -- Window in west wall
+    local westWindow = eastWindow:Clone()
+    westWindow.Position = westWall.Position + Vector3.new(-0.5, 0, 0)
+    westWindow.Parent = safeZoneFolder
+    
+    -- Roof with overhang
+    local roof = Instance.new("Part", safeZoneFolder)
+    roof.Size = Vector3.new(70, 1, 70)
+    roof.Position = platform.Position + Vector3.new(0, wallHeight, 0)
+    roof.Anchored = true
+    roof.CanCollide = true
+    roof.Material = Enum.Material.WoodPlanks
+    roof.Color = Color3.fromRGB(100, 70, 40)
+    
+    -- Interior decorations
+    -- Wooden table
+    local tableTop = Instance.new("Part", safeZoneFolder)
+    tableTop.Size = Vector3.new(10, 1, 5)
+    tableTop.Position = platform.Position + Vector3.new(0, 3, 0)
+    tableTop.Anchored = true
+    tableTop.CanCollide = true
+    tableTop.Material = Enum.Material.Wood
+    tableTop.Color = Color3.fromRGB(139, 69, 19)
+    
+    -- Table legs
+    for i = -1, 1, 2 do
+        for j = -1, 1, 2 do
+            local leg = Instance.new("Part", safeZoneFolder)
+            leg.Size = Vector3.new(1, 2, 1)
+            leg.Position = tableTop.Position + Vector3.new(i*4.5, -1.5, j*2)
+            leg.Anchored = true
+            leg.CanCollide = true
+            leg.Material = Enum.Material.Wood
+            leg.Color = tableTop.Color
+        end
+    end
+    
+    -- Chairs around table
+    for i = 1, 4 do
+        local angle = (i-1) * math.pi/2
+        local chair = Instance.new("Part", safeZoneFolder)
+        chair.Size = Vector3.new(3, 3, 3)
+        chair.Position = tableTop.Position + Vector3.new(math.cos(angle)*6, 1.5, math.sin(angle)*4)
+        chair.Anchored = true
+        chair.CanCollide = true
+        chair.Material = Enum.Material.Wood
+        chair.Color = Color3.fromRGB(160, 90, 50)
+        
+        -- Chair back
+        local chairBack = Instance.new("Part", safeZoneFolder)
+        chairBack.Size = Vector3.new(3, 6, 0.5)
+        chairBack.Position = chair.Position + Vector3.new(math.cos(angle)*1.5, 3, math.sin(angle)*1.5)
+        chairBack.Anchored = true
+        chairBack.CanCollide = true
+        chairBack.Material = Enum.Material.Wood
+        chairBack.Color = chair.Color
+    end
+    
+    -- Campfire area outside
+    local firePit = Instance.new("Part", safeZoneFolder)
+    firePit.Size = Vector3.new(8, 1, 8)
+    firePit.Position = platform.Position + Vector3.new(0, 0, -40)
+    firePit.Anchored = true
+    firePit.CanCollide = true
+    firePit.Material = Enum.Material.Slate
+    firePit.Color = Color3.fromRGB(80, 80, 80)
+    
+    -- Fire stones
+    for angle = 0, math.pi*2, math.pi/4 do
+        local stone = Instance.new("Part", safeZoneFolder)
+        stone.Size = Vector3.new(1, math.random(1,2), 1)
+        stone.Position = firePit.Position + Vector3.new(math.cos(angle)*4, 0.5, math.sin(angle)*4)
+        stone.Anchored = true
+        stone.CanCollide = true
+        stone.Material = Enum.Material.Slate
+        stone.Color = Color3.fromRGB(100, 100, 100)
+    end
+    
+    -- Actual fire
+    local fire = Instance.new("Fire", firePit)
+    fire.Size = 6
+    fire.Heat = 15
+    fire.Color = Color3.new(1, 0.5, 0.1)
+    fire.SecondaryColor = Color3.new(1, 0.8, 0)
+    
+    -- Fire light
+    local fireLight = Instance.new("PointLight", firePit)
+    fireLight.Brightness = 10
+    fireLight.Range = 20
+    fireLight.Color = Color3.new(1, 0.6, 0.3)
+    
+    -- Log seats around fire
+    for i = 1, 4 do
+        local angle = (i-1) * math.pi/2
+        local log = Instance.new("Part", safeZoneFolder)
+        log.Size = Vector3.new(6, 1.5, 1.5)
+        log.Position = firePit.Position + Vector3.new(math.cos(angle)*8, 0.75, math.sin(angle)*8)
+        log.Anchored = true
+        log.CanCollide = true
+        log.Material = Enum.Material.Wood
+        log.Color = Color3.fromRGB(101, 67, 33)
+        log.Rotation = Vector3.new(0, angle * 180/math.pi, 0)
+    end
+    
+    -- Sleeping area
+    local bed = Instance.new("Part", safeZoneFolder)
+    bed.Size = Vector3.new(10, 2, 6)
+    bed.Position = platform.Position + Vector3.new(20, 1, 0)
+    bed.Anchored = true
+    bed.CanCollide = true
+    bed.Material = Enum.Material.Fabric
+    bed.Color = Color3.fromRGB(200, 150, 150)
+    
+    -- Pillow
+    local pillow = Instance.new("Part", safeZoneFolder)
+    pillow.Size = Vector3.new(3, 1, 2)
+    pillow.Position = bed.Position + Vector3.new(3.5, 1.5, 0)
+    pillow.Anchored = true
+    pillow.CanCollide = true
+    pillow.Material = Enum.Material.Fabric
+    pillow.Color = Color3.fromRGB(255, 255, 255)
+    
+    -- Blanket
+    local blanket = Instance.new("Part", safeZoneFolder)
+    blanket.Size = Vector3.new(8, 0.5, 5)
+    blanket.Position = bed.Position + Vector3.new(0, 1.25, 0)
+    blanket.Anchored = true
+    blanket.CanCollide = true
+    blanket.Material = Enum.Material.Fabric
+    blanket.Color = Color3.fromRGB(150, 100, 100)
+    
+    -- Storage chest
+    local chest = Instance.new("Part", safeZoneFolder)
+    chest.Size = Vector3.new(6, 4, 4)
+    chest.Position = platform.Position + Vector3.new(-20, 2, 0)
+    chest.Anchored = true
+    chest.CanCollide = true
+    chest.Material = Enum.Material.Wood
+    chest.Color = Color3.fromRGB(120, 80, 50)
+    
+    -- Chest lid
+    local chestLid = Instance.new("Part", safeZoneFolder)
+    chestLid.Size = Vector3.new(6, 0.5, 4)
+    chestLid.Position = chest.Position + Vector3.new(0, 2.25, 2)
+    chestLid.Anchored = true
+    chestLid.CanCollide = true
+    chestLid.Material = chest.Material
+    chestLid.Color = chest.Color
+    chestLid.Rotation = Vector3.new(-30, 0, 0)
+    
+    -- Chest lock
+    local chestLock = Instance.new("Part", safeZoneFolder)
+    chestLock.Size = Vector3.new(1, 1, 0.5)
+    chestLock.Position = chest.Position + Vector3.new(0, 1, 2)
+    chestLock.Anchored = true
+    chestLock.CanCollide = true
+    chestLock.Material = Enum.Material.Metal
+    chestLock.Color = Color3.fromRGB(150, 150, 150)
+    
+    -- Weapon rack
+    local weaponRack = Instance.new("Part", safeZoneFolder)
+    weaponRack.Size = Vector3.new(8, 6, 1)
+    weaponRack.Position = platform.Position + Vector3.new(0, 3, 20)
+    weaponRack.Anchored = true
+    weaponRack.CanCollide = true
+    weaponRack.Material = Enum.Material.Wood
+    weaponRack.Color = Color3.fromRGB(100, 70, 40)
+    
+    -- Weapon rack hooks
+    for i = -1, 1, 0.5 do
+        local hook = Instance.new("Part", safeZoneFolder)
+        hook.Size = Vector3.new(0.5, 0.5, 1)
+        hook.Position = weaponRack.Position + Vector3.new(i*6, 0, 0.5)
+        hook.Anchored = true
+        hook.CanCollide = true
+        hook.Material = Enum.Material.Metal
+        hook.Color = Color3.fromRGB(150, 150, 150)
+    end
+    
+    -- Fake weapons on rack
+    local sword = Instance.new("Part", safeZoneFolder)
+    sword.Size = Vector3.new(0.5, 5, 0.5)
+    sword.Position = weaponRack.Position + Vector3.new(0, 0, 1)
+    sword.Anchored = true
+    sword.CanCollide = true
+    sword.Material = Enum.Material.Metal
+    sword.Color = Color3.fromRGB(200, 200, 200)
+    
+    -- Natural environment outside
+    -- Trees
+    local treeTypes = {
+        {trunkColor = Color3.fromRGB(101, 67, 33), leavesColor = Color3.fromRGB(34, 139, 34)},
+        {trunkColor = Color3.fromRGB(120, 80, 50), leavesColor = Color3.fromRGB(0, 100, 0)},
+        {trunkColor = Color3.fromRGB(80, 50, 20), leavesColor = Color3.fromRGB(50, 205, 50)}
+    }
+    
+    for i = 1, 20 do
+        local treeType = treeTypes[math.random(1, #treeTypes)]
+        local treePos = platform.Position + Vector3.new(
+            math.random(-100, 100),
+            0,
+            math.random(-100, 100)
+        ) + Vector3.new(0, terrain:GetHeight(treePos.X, treePos.Z) - 5000, 0)
+        
+        -- Tree trunk
+        local trunkHeight = math.random(10, 20)
+        local trunk = Instance.new("Part", safeZoneFolder)
+        trunk.Size = Vector3.new(math.random(3, 5), trunkHeight, math.random(3, 5))
+        trunk.Position = treePos + Vector3.new(0, trunkHeight/2, 0)
+        trunk.Anchored = true
+        trunk.CanCollide = true
+        trunk.Material = Enum.Material.Wood
+        trunk.Color = treeType.trunkColor
+        
+        -- Tree leaves (multiple parts for more realism)
+        for j = 1, 3 do
+            local leaves = Instance.new("Part", safeZoneFolder)
+            leaves.Size = Vector3.new(
+                math.random(8, 12),
+                math.random(4, 6),
+                math.random(8, 12)
+            )
+            leaves.Position = trunk.Position + Vector3.new(
+                0,
+                trunkHeight/2 + math.random(4, 8),
+                0
+            )
+            leaves.Anchored = true
+            leaves.CanCollide = true
+            leaves.Material = Enum.Material.Grass
+            leaves.Color = treeType.leavesColor
+            leaves.Shape = Enum.PartType.Ball
+        end
+    end
+    
+    -- Bushes
+    for i = 1, 30 do
+        local bushPos = platform.Position + Vector3.new(
+            math.random(-100, 100),
+            0,
+            math.random(-100, 100)
+        ) + Vector3.new(0, terrain:GetHeight(bushPos.X, bushPos.Z) - 5000, 0)
+        
+        local bush = Instance.new("Part", safeZoneFolder)
+        bush.Size = Vector3.new(
+            math.random(5, 8),
+            math.random(3, 5),
+            math.random(5, 8)
+        )
+        bush.Position = bushPos + Vector3.new(0, bush.Size.Y/2, 0)
+        bush.Anchored = true
+        bush.CanCollide = true
+        bush.Material = Enum.Material.Grass
+        bush.Color = Color3.fromRGB(0, math.random(100, 150), 0)
+        bush.Shape = Enum.PartType.Ball
+    end
+    
+    -- Rocks
+    for i = 1, 15 do
+        local rockPos = platform.Position + Vector3.new(
+            math.random(-100, 100),
+            0,
+            math.random(-100, 100)
+        ) + Vector3.new(0, terrain:GetHeight(rockPos.X, rockPos.Z) - 5000, 0)
+        
+        local rock = Instance.new("Part", safeZoneFolder)
+        rock.Size = Vector3.new(
+            math.random(3, 6),
+            math.random(1, 3),
+            math.random(3, 6)
+        )
+        rock.Position = rockPos + Vector3.new(0, rock.Size.Y/2, 0)
+        rock.Anchored = true
+        rock.CanCollide = true
+        rock.Material = Enum.Material.Slate
+        rock.Color = Color3.fromRGB(
+            math.random(80, 120),
+            math.random(80, 120),
+            math.random(80, 120)
+        )
+    end
+    
+    -- Ambient lighting
+    local lighting = game:GetService("Lighting")
+    
+    -- Save original lighting
+    if not getgenv().originalLighting then
+        getgenv().originalLighting = {
+            Ambient = lighting.Ambient,
+            Brightness = lighting.Brightness,
+            ColorShift_Bottom = lighting.ColorShift_Bottom,
+            ColorShift_Top = lighting.ColorShift_Top,
+            OutdoorAmbient = lighting.OutdoorAmbient
+        }
+    end
+    
+    -- Set safezone lighting
+    lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
+    lighting.Brightness = 2
+    lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
+    lighting.ColorShift_Top = Color3.new(0, 0, 0)
+    lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+    
+    -- Skybox
+    local skybox = Instance.new("Sky", safeZoneFolder)
+    skybox.SkyboxBk = "rbxassetid://6016555593"
+    skybox.SkyboxDn = "rbxassetid://6016555593"
+    skybox.SkyboxFt = "rbxassetid://6016555593"
+    skybox.SkyboxLf = "rbxassetid://6016555593"
+    skybox.SkyboxRt = "rbxassetid://6016555593"
+    skybox.SkyboxUp = "rbxassetid://6016555593"
+    
+    -- Sound effects
+    local ambientSound = Instance.new("Sound", safeZoneFolder)
+    ambientSound.SoundId = "rbxassetid://130976108" -- Forest ambient sound
+    ambientSound.Looped = true
+    ambientSound.Volume = 0.5
+    ambientSound:Play()
+    
+    -- Spawn position (on platform near door)
+    return platform.Position + Vector3.new(0, 5, -25)
+end
+
+Misc:Button({
+    Title = "Teleport to SafeZone",
+    Desc = "Teleports you to a safezone",
+    Callback = function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            lastPosition = character.HumanoidRootPart.CFrame
+            local safeZonePos = createSafeZone()
+            character.HumanoidRootPart.CFrame = CFrame.new(safeZonePos)
+        end
+    end
+})
+
+Misc:Button({
+    Title = "Teleport Back",
+    Desc = "Returns you to where you were",
+    Callback = function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") and lastPosition then
+            character.HumanoidRootPart.CFrame = lastPosition
+            if safeZoneFolder then
+                safeZoneFolder:Destroy()
+                safeZoneFolder = nil
+            end
+        end
+    end
+})
+
+Misc:Section({Title = "Character Modifications"})
+Misc:Divider()
+
+-- Disable Injuries Toggle
+local disableInjuriesEnabled = false
+local injuriesConnection
+
+Misc:Toggle({
+    Title = "Disable Injuries",
+    Desc = "Removes injured walking",
+    Value = false,
+    Callback = function(state)
+        disableInjuriesEnabled = state
+        if state then
+            injuriesConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Add small delay between checks
+                    task.wait(0.3)
+                    
+                    local player = Players.LocalPlayer
+                    local character = workspace.Live:FindFirstChild(player.Name)
+                    if character then
+                        local injuredWalking = character:FindFirstChild("InjuredWalking")
+                        if injuredWalking then
+                            injuredWalking:Destroy()
+                        end
+                    end
+                end)
+            end)
+        else
+            if injuriesConnection then
+                injuriesConnection:Disconnect()
+                injuriesConnection = nil
+            end
+        end
+    end
+})
+
+-- Disable Stun/Slow Toggle
+local disableStunEnabled = false
+local stunConnection
+
+Misc:Toggle({
+    Title = "Disable Stun/Slow",
+    Desc = "Removes stun and slow effects",
+    Value = false,
+    Callback = function(state)
+        disableStunEnabled = state
+        if state then
+            stunConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Add small delay between checks
+                    task.wait(0.3)
+                    
+                    local player = Players.LocalPlayer
+                    local character = workspace.Live:FindFirstChild(player.Name)
+                    if character then
+                        for _, descendant in pairs(character:GetDescendants()) do
+                            if string.find(string.lower(descendant.Name), "stun") then
+                                descendant:Destroy()
+                            end
+                        end
+                    end
+                end)
+            end)
+            
+            -- Also check when character is added
+            Players.LocalPlayer.CharacterAdded:Connect(function(character)
+                if disableStunEnabled then
+                    task.wait(1) -- Wait for character to fully load
+                    for _, descendant in pairs(character:GetDescendants()) do
+                        if string.find(string.lower(descendant.Name), "stun") then
+                            descendant:Destroy()
+                        end
+                    end
+                end
+            end)
+        else
+            if stunConnection then
+                stunConnection:Disconnect()
+                stunConnection = nil
+            end
+        end
+    end
+})
+
+-- Anti AFK Toggle
+local antiAFKEnabled = false
+local antiAFKConnection
+
+Misc:Toggle({
+    Title = "Anti AFK",
+    Desc = "Prevents you from being kicked for inactivity",
+    Value = false,
+    Callback = function(state)
+        antiAFKEnabled = state
+        if state then
+            -- Simulate activity by moving the mouse slightly
+            antiAFKConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Move mouse slightly every 30 seconds to prevent AFK
+                    if tick() % 30 < 0.1 then
+                        local VirtualInputManager = game:GetService("VirtualInputManager")
+                        VirtualInputManager:SendMouseMoveEvent(1, 1, game:GetService("Players").LocalPlayer.PlayerGui)
+                    end
+                    
+                    -- Alternative method using VirtualUser
+                    local VirtualUser = game:GetService("VirtualUser")
+                    VirtualUser:CaptureController()
+                    VirtualUser:SetKeyDown("0x01") -- Left mouse button
+                    VirtualUser:SetKeyUp("0x01")
+                end)
+            end)
+            
+            -- Also connect to the game's idle event
+            Players.LocalPlayer.Idled:Connect(function()
+                if antiAFKEnabled then
+                    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                    task.wait(1)
+                    game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                end
+            end)
+        else
+            if antiAFKConnection then
+                antiAFKConnection:Disconnect()
+                antiAFKConnection = nil
+            end
+        end
+    end
+})
+
+-- NoClip Toggle
+local noclipEnabled = false
+local noclipConnection
+
+local function noclipLoop()
+    if noclipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end
+
+Misc:Toggle({
+    Title = "NoClip",
+    Desc = "Walk through walls and objects",
+    Value = false,
+    Callback = function(state)
+        noclipEnabled = state
+        if state then
+            -- Enable NoClip
+            noclipConnection = RunService.Stepped:Connect(noclipLoop)
+            
+            -- Handle character respawns
+            LocalPlayer.CharacterAdded:Connect(function(char)
+                task.wait(0.5) -- Wait for character to fully load
+                if noclipEnabled then
+                    noclipLoop()
+                end
+            end)
+        else
+            -- Disable NoClip
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+            
+            -- Restore collision if character exists
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+})
