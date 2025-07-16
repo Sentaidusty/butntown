@@ -1856,7 +1856,7 @@ end
 
 -- Main toggle for hitboxes
 Combat:Toggle({
-    Title = "Hitbox Expander",
+    Title = "Guard Hitbox Expander",
     Desc = "Makes guards easier to hit by expanding their hitbox",
     Value = false,
     Callback = function(state)
@@ -1865,21 +1865,16 @@ Combat:Toggle({
     end
 })
 
--- Hitbox customization section
-Combat:Section({Title = "Hitbox Customization"})
-Combat:Divider()
-
--- Size slider
 Combat:Slider({
-    Title = "Hitbox Size",
-    Desc = "Adjust the size of the hitboxes (1-20)",
-    Min = 1,
-    Max = 20,
-    Default = 5,
+    Title = "Guard Hitbox Size",
+    Value = {
+        Min = 1,
+        Max = 20,
+        Default = 5,
+    },
     Callback = function(value)
         hitboxSize = value
         if hitboxEnabled then
-            -- Update all existing hitboxes
             for guard, hitbox in pairs(hitboxParts) do
                 if hitbox and hitbox.Parent then
                     hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
@@ -1889,18 +1884,16 @@ Combat:Slider({
     end
 })
 
--- Transparency slider
 Combat:Slider({
-    Title = "Hitbox Transparency",
-    Desc = "Adjust the transparency of the hitboxes (0-1)",
-    Min = 0,
-    Max = 1,
-    Default = 0.7,
-    Precise = 2, -- Allows decimal values
+    Title = "Guard Hitbox Transparency",
+    Value = {
+        Min = 0,
+        Max = 1,
+        Default = 0.7,
+    },
     Callback = function(value)
         hitboxTransparency = value
         if hitboxEnabled then
-            -- Update all existing hitboxes
             for guard, hitbox in pairs(hitboxParts) do
                 if hitbox and hitbox.Parent then
                     hitbox.Transparency = hitboxTransparency
@@ -1912,7 +1905,7 @@ Combat:Slider({
 
 -- Color picker
 Combat:Colorpicker({
-    Title = "Hitbox Color",
+    Title = "Guard Hitbox Color",
     Default = Color3.fromRGB(255, 0, 0), -- Red
     Callback = function(color)
         hitboxColor = color
@@ -2340,6 +2333,37 @@ Misc:Toggle({
                 stunConnection:Disconnect()
                 stunConnection = nil
             end
+        end
+    end
+})
+
+Misc:Slider({
+    Title = "Walk Speed",
+    Value = {
+        Min = 16,
+        Max = 100,
+        Default = 16,
+    },
+    Callback = function(value)
+        getgenv().currentWalkSpeed = value
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = value
+        end
+    end
+})
+
+Misc:Slider({
+    Title = "Jump Power",
+    Value = {
+        Min = 50,
+        Max = 200,
+        Default = 50,
+    },
+    Callback = function(value)
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.JumpPower = value
         end
     end
 })
