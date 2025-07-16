@@ -15,9 +15,16 @@ local hiddenfling = false
 local glassESPEnabled = false
 local glassESPConnections = {}
 local safeGlassHighlights = {}
+local rlglModule = {
+    _IsGreenLight = false,
+    _LastRootPartCFrame = nil,
+    _OriginalNamecall = nil,
+    _Connection = nil,
+    _CleanupFunction = nil  -- Add this line
+}
 
 local Window = WindUI:CreateWindow({
-    Title = "Agsy | Ink Game V2.3",
+    Title = "Agsy | Ink Game V2.5",
     Icon = "rbxassetid://122545428580310",
     IconThemed = true,
     Author = "Agsy",
@@ -33,7 +40,7 @@ Window:SetBackgroundImageTransparency(0.6)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Agsy | Ink Game V2.3",
+    Title = "Agsy | Ink Game V2.5",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -63,8 +70,8 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V2.3",
-    Desc = "[+] Added Misc Tab\n[+] Added Disable Injuries\n[+] Added Disable Stub\n[+] Added Noclip\n[+] Added Auto Kill in Lights Out Section (Win Tab)",
+    Title = "Changelogs V2.5",
+    Desc = "[+] Added Guard ESP and Player ESP in Visuals Tab\n[+] Added Door ESP in Hide and Seek\n[+] Added Key ESP in Hide and Seek\n[~] Fixed Escape Door ESP in Hide and Seek Section\n[~] Fixed Reveal Safe Glasses\n[~] Fixed Auto Pull Rope in Tug Of War Section",
     Image = "rbxassetid://122545428580310",
 })
 
@@ -101,8 +108,113 @@ local Visual = GameSection:Tab({
     Title = "Visual",
     Icon = "eye",
     ShowTabTitle = true,
-    Locked = true
+    Locked = false
 })
+
+local lplr = game:GetService("Players").LocalPlayer
+
+-- Function to show WindUI notification
+local function showNotification(title, message)
+    WindUI:Notify({
+        Title = title,
+        Description = message,
+        Duration = 5,
+        Callback = function() end
+    })
+end
+
+-- Anti-Cheat Bypass Function
+local function PatchFlingAnticheat()
+    showNotification("Anti-Cheat", "Bypassing AntiCheat...")
+    
+    local char = lplr.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- Patch unwanted states/folders
+    local anticheatStates = { "Stun", "Anchor", "RotateDisabled", "CantRun", "InCutscene", "DisableHeadLookAt" }
+    char.ChildAdded:Connect(function(child)
+        if table.find(anticheatStates, child.Name) then
+            child:Destroy()
+        end
+    end)
+
+    -- Patch metatable to prevent anchoring
+    local mt = getrawmetatable(root)
+    local oldNewIndex = mt.__newindex
+    setreadonly(mt, false)
+    mt.__newindex = function(self, key, value)
+        if self == root and key == "Anchored" and value == true then
+            -- Block anchoring
+            return
+        end
+        return oldNewIndex(self, key, value)
+    end
+    setreadonly(mt, true)
+end
+
+-- Initial patch
+PatchFlingAnticheat()
+
+-- Patch when character respawns
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    PatchFlingAnticheat()
+end)
+
+local function HandleRedLightGreenLight()
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Client = Players.LocalPlayer
+    
+    -- Track traffic light state and player position
+    rlglModule._Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(EffectsData)
+        if EffectsData.EffectName ~= "TrafficLight" then return end
+        
+        rlglModule._IsGreenLight = EffectsData.GreenLight == true
+        
+        local rootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            rlglModule._LastRootPartCFrame = rootPart.CFrame
+        end
+    end)
+    
+    -- Hook the RemoteEvent to prevent movement during red light
+    local rawmt = getrawmetatable(game)
+    setreadonly(rawmt, false)
+    rlglModule._OriginalNamecall = rawmt.__namecall
+    
+    rawmt.__namecall = newcclosure(function(instance, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        
+        if method == "FireServer" and instance.ClassName == "RemoteEvent" and instance.Name == "rootCFrame" then
+            if not rlglModule._IsGreenLight and rlglModule._LastRootPartCFrame then
+                -- Send cached position during red light
+                args[1] = rlglModule._LastRootPartCFrame
+                return rlglModule._OriginalNamecall(instance, unpack(args))
+            end
+        end
+        
+        return rlglModule._OriginalNamecall(instance, ...)
+    end)
+    
+    -- Return cleanup function
+    return function()
+        if rlglModule._Connection then
+            rlglModule._Connection:Disconnect()
+            rlglModule._Connection = nil
+        end
+        
+        if rawmt and rlglModule._OriginalNamecall then
+            setreadonly(rawmt, false)
+            rawmt.__namecall = rlglModule._OriginalNamecall
+            setreadonly(rawmt, true)
+            rlglModule._OriginalNamecall = nil
+        end
+    end
+end
 
 -- Automatic Anti-Ban for Teleporting (exact implementation as requested)
 local originalNamecall
@@ -371,77 +483,20 @@ Main:Button({
     end
 })
 
-local rlglGodModeEnabled = false
-local rlglModule = {
-    _IsGreenLight = false,
-    _LastRootPartCFrame = nil,
-    _OriginalNamecall = nil,
-    _Connection = nil
-}
-
-function rlglModule:Start()
-    local Client = Players.LocalPlayer
-    local TrafficLightImage = Client.PlayerGui:WaitForChild("ImpactFrames"):WaitForChild("TrafficLightEmpty")
-
-    self._IsGreenLight = TrafficLightImage.Image == ReplicatedStorage.Effects.Images.TrafficLights.GreenLight.Image
-
-    local RootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
-    self._LastRootPartCFrame = RootPart and RootPart.CFrame
-    
-    self._Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(EffectsData)
-        if EffectsData.EffectName ~= "TrafficLight" then return end
-        self._IsGreenLight = EffectsData.GreenLight == true
-        local RootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
-        self._LastRootPartCFrame = RootPart and RootPart.CFrame
-    end)
-
-    local rawmt = getrawmetatable(game)
-    setreadonly(rawmt, false)
-    self._OriginalNamecall = rawmt.__namecall
-    
-    rawmt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-
-        if method == "FireServer" and self.ClassName == "RemoteEvent" and self.Name == "rootCFrame" then
-            if rlglModule._IsGreenLight == false and rlglModule._LastRootPartCFrame then
-                args[1] = rlglModule._LastRootPartCFrame
-                return rlglModule._OriginalNamecall(self, unpack(args))
-            end
-        end
-
-        return rlglModule._OriginalNamecall(self, ...)
-    end)
-end
-
-function rlglModule:Stop()
-    if self._Connection then
-        self._Connection:Disconnect()
-        self._Connection = nil
-    end
-    
-    if self._OriginalNamecall then
-        local rawmt = getrawmetatable(game)
-        setreadonly(rawmt, false)
-        rawmt.__namecall = self._OriginalNamecall
-        setreadonly(rawmt, true)
-        self._OriginalNamecall = nil
-    end
-    
-    self._IsGreenLight = false
-    self._LastRootPartCFrame = nil
-end
-
 Main:Toggle({
-    Title = "Red Light Green Light God Mode (Not Working Rn)",
+    Title = "God Mode (Fixing)",
     Desc = "Prevents detection during red light",
     Value = false,
     Callback = function(state)
-        rlglGodModeEnabled = state
         if state then
-            rlglModule:Start()
+            -- Initialize and store cleanup function
+            rlglModule._CleanupFunction = HandleRedLightGreenLight()
         else
-            rlglModule:Stop()
+            -- Call cleanup if it exists
+            if rlglModule._CleanupFunction then
+                rlglModule._CleanupFunction()
+                rlglModule._CleanupFunction = nil
+            end
         end
     end
 })
@@ -449,52 +504,89 @@ Main:Toggle({
 -- Glass Bridge Section
 Main:Section({Title = "Glass Bridge"})
 Main:Divider()
+local glassESPEnabled = false
+local glassESPConnections = {}
+local glassHighlights = {}
+
+local function RevealGlassBridge()
+    local bridge = workspace:FindFirstChild("GlassBridge")
+    if not bridge then return end
+
+    for _, tilePair in ipairs(bridge:GetChildren()) do
+        for _, tile in ipairs(tilePair:GetChildren()) do
+            if tile:IsA("Model") and tile.PrimaryPart then
+                -- Clear existing highlight if any
+                if glassHighlights[tile] then
+                    glassHighlights[tile]:Destroy()
+                    glassHighlights[tile] = nil
+                end
+
+                if not glassESPEnabled then continue end
+
+                local isSafe = tile:GetAttribute("IsSafe") or false
+                
+                -- Apply colored highlight
+                local highlight = Instance.new("Highlight")
+                highlight.Adornee = tile
+                highlight.FillColor = isSafe and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+                highlight.OutlineColor = isSafe and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+                highlight.FillTransparency = 0.7
+                highlight.OutlineTransparency = 0
+                highlight.Parent = tile
+                glassHighlights[tile] = highlight
+
+                -- Track tile changes
+                if not glassESPConnections[tile] then
+                    glassESPConnections[tile] = tile:GetAttributeChangedSignal("IsSafe"):Connect(function()
+                        if glassHighlights[tile] then
+                            local isSafeNow = tile:GetAttribute("IsSafe") or false
+                            glassHighlights[tile].FillColor = isSafeNow and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+                            glassHighlights[tile].OutlineColor = isSafeNow and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end
+
+local function SetupGlassESP()
+    -- Clear existing highlights
+    for tile, highlight in pairs(glassHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(glassHighlights)
+    
+    for tile, conn in pairs(glassESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(glassESPConnections)
+
+    if not glassESPEnabled then return end
+
+    -- Initial scan
+    RevealGlassBridge()
+
+    -- Monitor for bridge changes
+    glassESPConnections.bridgeAdded = workspace.DescendantAdded:Connect(function(descendant)
+        if descendant.Name == "GlassBridge" then
+            RevealGlassBridge()
+        end
+    end)
+end
+
+-- Update the existing Glass Bridge toggle
 Main:Toggle({
     Title = "Reveal Safe Glass",
     Desc = "Colors safe glass panels green and trap panels red",
     Value = false,
     Callback = function(state)
         glassESPEnabled = state
-        if state then
-            pcall(function()
-                local GlassHolder = workspace:WaitForChild("GlassBridge"):WaitForChild("GlassHolder")
-                for _, PanelPair in ipairs(GlassHolder:GetChildren()) do
-                    for _, Panel in ipairs(PanelPair:GetChildren()) do
-                        local GlassPart = Panel:WaitForChild("glasspart")
-                        local isTrap = GlassPart:GetAttribute("exploitingisevil")
-                        
-                        if not GlassPart:GetAttribute("OriginalColor") then
-                            GlassPart:SetAttribute("OriginalColor", GlassPart.Color)
-                            GlassPart:SetAttribute("OriginalTransparency", GlassPart.Transparency)
-                            GlassPart:SetAttribute("OriginalMaterial", GlassPart.Material)
-                        end
-                        
-                        GlassPart.Color = isTrap and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(50, 200, 50)
-                        GlassPart.Transparency = isTrap and 0.4 or 0.6
-                        GlassPart.Material = Enum.Material.Glass
-                    end
-                end
-            end)
-        else
-            pcall(function()
-                local GlassBridge = workspace:FindFirstChild("GlassBridge")
-                if GlassBridge then
-                    local GlassHolder = GlassBridge:FindFirstChild("GlassHolder")
-                    if GlassHolder then
-                        for _, PanelPair in ipairs(GlassHolder:GetChildren()) do
-                            for _, Panel in ipairs(PanelPair:GetChildren()) do
-                                local GlassPart = Panel:FindFirstChild("glasspart")
-                                if GlassPart and GlassPart:GetAttribute("OriginalColor") then
-                                    GlassPart.Color = GlassPart:GetAttribute("OriginalColor")
-                                    GlassPart.Transparency = GlassPart:GetAttribute("OriginalTransparency")
-                                    GlassPart.Material = GlassPart:GetAttribute("OriginalMaterial")
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
+        SetupGlassESP()
     end
 })
 
@@ -503,21 +595,39 @@ Main:Divider()
 
 local autoChokeholdEnabled = false
 local chokeholdConnections = {}
+local remoteFound = false
 
-local function SetupMingleAuto(Character)
-    local RemoteForQTE = Character:WaitForChild("RemoteForQTE", 5)
-    if not RemoteForQTE then return end
-
-    local connection
-    connection = RunService.Heartbeat:Connect(function()
-        if not autoChokeholdEnabled or not RemoteForQTE or not RemoteForQTE.Parent then
-            if connection then connection:Disconnect() end
-            return
+local function findAndFireRemote()
+    -- Search through all descendants in workspace
+    for _, descendant in pairs(workspace:GetDescendants()) do
+        if descendant.Name == "RemoteForQTE" and descendant:IsA("RemoteEvent") then
+            remoteFound = true
+            local connection
+            connection = RunService.Heartbeat:Connect(function()
+                if not autoChokeholdEnabled or not descendant or not descendant.Parent then
+                    if connection then connection:Disconnect() end
+                    return
+                end
+                descendant:FireServer() -- Auto-complete the QTE
+            end)
+            table.insert(chokeholdConnections, connection)
         end
-        RemoteForQTE:FireServer() -- Spams the QTE event to auto-complete
-    end)
+    end
+end
+
+local function setupAutoChokehold()
+    -- Initial search
+    findAndFireRemote()
     
-    table.insert(chokeholdConnections, connection)
+    -- Listen for when RemoteForQTE is added anywhere in workspace
+    chokeholdConnections.descendantAdded = workspace.DescendantAdded:Connect(function(descendant)
+        if descendant.Name == "RemoteForQTE" and descendant:IsA("RemoteEvent") then
+            if not remoteFound then
+                remoteFound = true
+                findAndFireRemote()
+            end
+        end
+    end)
 end
 
 Main:Toggle({
@@ -526,20 +636,10 @@ Main:Toggle({
     Value = false,
     Callback = function(state)
         autoChokeholdEnabled = state
+        remoteFound = false
         
         if state then
-            -- Setup for current character if exists
-            local currentChar = LocalPlayer.Character
-            if currentChar then
-                task.spawn(function()
-                    SetupMingleAuto(currentChar)
-                end)
-            end
-            
-            -- Setup for future characters
-            chokeholdConnections.characterAdded = LocalPlayer.CharacterAdded:Connect(function(Character)
-                SetupMingleAuto(Character)
-            end)
+            setupAutoChokehold()
         else
             -- Clean up all connections
             for _, conn in pairs(chokeholdConnections) do
@@ -650,11 +750,32 @@ Main:Toggle({
                         -- Teleport to target
                         character.HumanoidRootPart.CFrame = currentTarget.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
                         
-                        -- Attack
-                        local args = {
-                            "Clicked"
-                        }
-                        game:GetService("ReplicatedStorage"):WaitForChild("Replication"):WaitForChild("Event"):FireServer(unpack(args))
+                        -- Simulate mouse click
+                        local VirtualInputManager = game:GetService("VirtualInputManager")
+                        local mousePos = Vector2.new(0, 0) -- Position doesn't matter for mouse click
+                        
+                        -- Mouse down
+                        VirtualInputManager:SendMouseButtonEvent(
+                            mousePos.X, 
+                            mousePos.Y, 
+                            0, -- Left mouse button
+                            true, -- Down
+                            game, 
+                            1 -- Click count
+                        )
+                        
+                        -- Small delay between down and up
+                        task.wait(0.05)
+                        
+                        -- Mouse up
+                        VirtualInputManager:SendMouseButtonEvent(
+                            mousePos.X, 
+                            mousePos.Y, 
+                            0, -- Left mouse button
+                            false, -- Up
+                            game, 
+                            1 -- Click count
+                        )
                         
                         -- Small delay between attacks
                         task.wait(0.2)
@@ -737,24 +858,71 @@ local HidersColor = Color3.fromRGB(0, 255, 230)  -- Cyan
 local HuntersColor = Color3.fromRGB(255, 0, 0)   -- Red
 local DefaultColor = Color3.fromRGB(255, 255, 0) -- Yellow (fallback)
 
--- Store ESP highlights
+-- Store ESP highlights and billboards
 local ESPHighlights = {}
+local ESPBillboards = {}
+
+-- Function to check if a tool matches role criteria
+local function isHunterTool(tool)
+    return tool:IsA("Tool") and string.find(string.lower(tool.Name), "knife")
+end
+
+local function isHiderTool(tool)
+    if tool:IsA("Tool") then
+        local toolName = string.lower(tool.Name)
+        return string.find(toolName, "key") or string.find(toolName, "dodge")
+    end
+    return false
+end
+
+-- Function to determine player role by checking both backpack and equipped tools
+local function getPlayerRole(player)
+    if player == LocalPlayer then return nil end -- Skip local player
+    
+    -- Check workspace.Live first (equipped tools)
+    local liveChar = workspace.Live:FindFirstChild(player.Name)
+    if liveChar then
+        for _, tool in ipairs(liveChar:GetChildren()) do
+            if isHunterTool(tool) then return "Hunter" end
+            if isHiderTool(tool) then return "Hider" end
+        end
+    end
+    
+    -- Check backpack if no equipped tools found
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if isHunterTool(tool) then return "Hunter" end
+            if isHiderTool(tool) then return "Hider" end
+        end
+    end
+    
+    return nil
+end
 
 -- Function to create/update ESP
-local function applyESP(object, role)
-    if not object or not object.Parent then return end
+local function applyESP(character, role)
+    if not character or not character.Parent then return end
 
-    -- Skip if already highlighted
-    if ESPHighlights[object] then return end
+    -- Clear existing ESP if any
+    if ESPHighlights[character] then
+        ESPHighlights[character]:Destroy()
+        ESPHighlights[character] = nil
+    end
+    if ESPBillboards[character] then
+        ESPBillboards[character]:Destroy()
+        ESPBillboards[character] = nil
+    end
 
     -- Only apply if the corresponding toggle is enabled
     if (role == "Hider" and not HidersESPEnabled) or (role == "Hunter" and not HuntersESPEnabled) then
         return
     end
 
+    -- Create highlight
     local highlight = Instance.new("Highlight")
     highlight.Name = "HideAndSeekESP"
-    highlight.Adornee = object
+    highlight.Adornee = character
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.FillTransparency = 0.7
     highlight.OutlineTransparency = 0
@@ -765,72 +933,135 @@ local function applyESP(object, role)
     elseif role == "Hunter" then
         highlight.FillColor = HuntersColor
         highlight.OutlineColor = HuntersColor
-    else
-        highlight.FillColor = DefaultColor
-        highlight.OutlineColor = DefaultColor
     end
 
-    highlight.Parent = object
-    ESPHighlights[object] = highlight
+    highlight.Parent = character
+    ESPHighlights[character] = highlight
+
+    -- Create billboard label
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "RoleLabel"
+    billboard.Adornee = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 1
+    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    billboard.MaxDistance = 100
+
+    local label = Instance.new("TextLabel")
+    label.Name = "RoleText"
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextStrokeTransparency = 0
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 18
+    label.TextColor3 = role == "Hider" and HidersColor or HuntersColor
+    label.Text = string.upper(role)
+    label.Parent = billboard
+
+    billboard.Parent = character
+    ESPBillboards[character] = billboard
 end
 
 -- Function to clear ESP
 local function clearESP()
-    for object, highlight in pairs(ESPHighlights) do
+    for character, highlight in pairs(ESPHighlights) do
         if highlight and highlight.Parent then
             highlight:Destroy()
         end
     end
     table.clear(ESPHighlights)
+    
+    for character, billboard in pairs(ESPBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(ESPBillboards)
 end
 
--- Check attributes on an object
-local function checkAttributes(object)
-    if not object:IsA("BasePart") and not object:IsA("Model") then return end
-
-    if object:GetAttribute("IsHider") then
-        applyESP(object, "Hider")
-    elseif object:GetAttribute("IsHunter") then
-        applyESP(object, "Hunter")
+-- Track tool changes in workspace.Live characters
+local function trackLiveCharacter(player)
+    local function checkCharacter(character)
+        -- Check for existing tools
+        local role = getPlayerRole(player)
+        if role then
+            applyESP(character, role)
+        end
+        
+        -- Track tool additions/removals
+        character.ChildAdded:Connect(function(child)
+            if isHunterTool(child) then
+                applyESP(character, "Hunter")
+            elseif isHiderTool(child) then
+                applyESP(character, "Hider")
+            end
+        end)
+        
+        character.ChildRemoved:Connect(function(child)
+            if isHunterTool(child) or isHiderTool(child) then
+                -- Re-check role after tool removal
+                local newRole = getPlayerRole(player)
+                if newRole then
+                    applyESP(character, newRole)
+                else
+                    -- Remove ESP if no longer has role-specific tools
+                    if ESPHighlights[character] then
+                        ESPHighlights[character]:Destroy()
+                        ESPHighlights[character] = nil
+                    end
+                    if ESPBillboards[character] then
+                        ESPBillboards[character]:Destroy()
+                        ESPBillboards[character] = nil
+                    end
+                end
+            end
+        end)
     end
-end
-
--- Scan workspace for objects with attributes
-local function scanWorkspace()
-    for _, descendant in pairs(workspace:GetDescendants()) do
-        checkAttributes(descendant)
+    
+    -- Check if character already exists in workspace.Live
+    local liveChar = workspace.Live:FindFirstChild(player.Name)
+    if liveChar then
+        checkCharacter(liveChar)
     end
+    
+    -- Track when character appears in workspace.Live
+    workspace.Live.ChildAdded:Connect(function(child)
+        if child.Name == player.Name then
+            checkCharacter(child)
+        end
+    end)
 end
 
 -- Handle players
 local function updatePlayers()
     for _, player in pairs(Players:GetPlayers()) do
-        if player == LocalPlayer then continue end
+        if player == LocalPlayer then continue end -- Skip local player
 
-        local character = player.Character
-        if character then
-            checkAttributes(character)
-        end
-
-        -- Track character changes
-        player.CharacterAdded:Connect(function(newChar)
-            checkAttributes(newChar)
+        trackLiveCharacter(player)
+        
+        -- Also track backpack changes (for when tools are unequipped)
+        player:GetPropertyChangedSignal("Backpack"):Connect(function()
+            task.wait(0.5) -- Small delay
+            if player.Character then
+                local role = getPlayerRole(player)
+                if role then
+                    applyESP(player.Character, role)
+                else
+                    -- Remove ESP if no longer has role-specific tools
+                    if ESPHighlights[player.Character] then
+                        ESPHighlights[player.Character]:Destroy()
+                        ESPHighlights[player.Character] = nil
+                    end
+                    if ESPBillboards[player.Character] then
+                        ESPBillboards[player.Character]:Destroy()
+                        ESPBillboards[player.Character] = nil
+                    end
+                end
+            end
         end)
-    end
-end
-
--- Listen for attribute changes in workspace
-local function setupWorkspaceTracking()
-    workspace.DescendantAdded:Connect(function(descendant)
-        if descendant:GetAttribute("IsHider") or descendant:GetAttribute("IsHunter") then
-            checkAttributes(descendant)
-        end
-    end)
-
-    for _, descendant in pairs(workspace:GetDescendants()) do
-        if descendant:GetAttribute("IsHider") or descendant:GetAttribute("IsHunter") then
-            checkAttributes(descendant)
-        end
     end
 end
 
@@ -838,16 +1069,24 @@ end
 local function updateESP()
     clearESP()
     if not HidersESPEnabled and not HuntersESPEnabled then return end
-
-    scanWorkspace()
     updatePlayers()
 end
 
 -- Initialize
-Players.PlayerAdded:Connect(updateESP)
+Players.PlayerAdded:Connect(function(player)
+    if player == LocalPlayer then return end
+    trackLiveCharacter(player)
+    updateESP()
+end)
+
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateESP) -- Re-apply on respawn
 
-setupWorkspaceTracking()
+-- Initial scan
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        trackLiveCharacter(player)
+    end
+end
 updateESP()
 
 -- Replace the old ESP toggle with two separate toggles
@@ -871,90 +1110,319 @@ Main:Toggle({
     end
 })
 
-local exitDoorHighlights = {}
-local exitDoorESPEnabled = false
+-- Add Key ESP toggle
+local keyESPEnabled = false
+local keyESPConnections = {}
+local keyHighlights = {}
 
-local function updateExitDoorESP()
-    -- Clear existing highlights
-    for _, highlight in pairs(exitDoorHighlights) do
-        highlight:Destroy()
+local function KeyESP(keyModel)
+    if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
+        return
     end
-    exitDoorHighlights = {}
 
-    if not exitDoorESPEnabled then return end
+    -- Create Highlight for the key
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "KeyESP"
+    highlight.Adornee = keyModel
+    highlight.FillColor = Color3.fromRGB(255, 255, 0)  -- Yellow color for keys
+    highlight.OutlineColor = Color3.fromRGB(255, 215, 0) -- Gold outline
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.Parent = keyModel
+    keyHighlights[keyModel] = highlight
 
-    -- Safely find all exit doors in the HideAndSeekMap with WaitForChild
-    pcall(function()
-        local hideAndSeekMap = workspace:WaitForChild("HideAndSeekMap")
-        local newFixedDoors = hideAndSeekMap:WaitForChild("NEWFIXEDDOORS")
-
-        -- Search for floor folders (case insensitive)
-        for _, child in ipairs(newFixedDoors:GetChildren()) do
-            if string.find(string.lower(child.Name), "floor") then
-                local exitDoors = child:WaitForChild("EXITDOORS", 1) or child:FindFirstChild("EXITDOORS")
-                if exitDoors then
-                    -- Search for exit door models (case insensitive)
-                    for _, doorModel in ipairs(exitDoors:GetChildren()) do
-                        if string.find(string.lower(doorModel.Name), "exitdoor") then
-                            local doorPart = doorModel:FindFirstChildOfClass("BasePart") or doorModel:FindFirstChildWhichIsA("BasePart")
-                            if doorPart then
-                                local highlight = Instance.new("Highlight")
-                                highlight.Parent = doorPart
-                                highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
-                                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                                highlight.FillTransparency = 0.3
-                                highlight.OutlineTransparency = 0
-                                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                                table.insert(exitDoorHighlights, highlight)
-                            end
-                        end
-                    end
-                end
+    -- Clean up if the key is destroyed or removed
+    local connection
+    connection = keyModel.AncestryChanged:Connect(function(_, parent)
+        if not parent or not keyModel:IsDescendantOf(game) then
+            if highlight and highlight.Parent then
+                highlight:Destroy()
             end
+            if connection then
+                connection:Disconnect()
+            end
+            keyHighlights[keyModel] = nil
+        end
+    end)
+
+    keyESPConnections[keyModel] = connection
+end
+
+local function SetupKeyESP()
+    -- Clear existing highlights and connections
+    for key, highlight in pairs(keyHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(keyHighlights)
+    
+    for key, conn in pairs(keyESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(keyESPConnections)
+
+    if not keyESPEnabled then return end
+
+    -- Scan existing keys in workspace
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
+        end
+    end
+
+    -- Listen for new keys
+    keyESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
         end
     end)
 end
 
 Main:Toggle({
-    Title = "ESP Exit Doors",
-    Desc = "Highlights exit doors in Hide and Seek",
+    Title = "ESP Key",
+    Desc = "Highlights keys in Hide and Seek",
     Value = false,
     Callback = function(state)
-        exitDoorESPEnabled = state
-        if state then
-            -- Initial ESP update
-            updateExitDoorESP()
-            
-            -- Set up connections to update ESP when doors are added/removed
-            getgenv().exitDoorESPConnectionAdded = workspace.DescendantAdded:Connect(function(descendant)
-                if descendant:IsA("Model") and string.find(string.lower(descendant.Name), "exitdoor") then
-                    task.wait(0.5) -- Wait a bit to ensure the door is fully loaded
-                    updateExitDoorESP()
-                end
-            end)
-            
-            getgenv().exitDoorESPConnectionRemoved = workspace.DescendantRemoving:Connect(function(descendant)
-                if descendant:IsA("Model") and string.find(string.lower(descendant.Name), "exitdoor") then
-                    updateExitDoorESP()
-                end
-            end)
-        else
-            -- Clean up highlights and connections
-            for _, highlight in pairs(exitDoorHighlights) do
-                highlight:Destroy()
-            end
-            exitDoorHighlights = {}
-            
-            if getgenv().exitDoorESPConnectionAdded then
-                getgenv().exitDoorESPConnectionAdded:Disconnect()
-                getgenv().exitDoorESPConnectionAdded = nil
-            end
-            
-            if getgenv().exitDoorESPConnectionRemoved then
-                getgenv().exitDoorESPConnectionRemoved:Disconnect()
-                getgenv().exitDoorESPConnectionRemoved = nil
+        keyESPEnabled = state
+        SetupKeyESP()
+    end
+})
+
+-- Improved Escape Door ESP
+local escapeDoorESPEnabled = false
+local escapeDoorHighlights = {}
+local escapeDoorBillboards = {}
+local escapeDoorConnections = {}
+
+local function EscapeDoorESP(door)
+    -- Validate the door object
+    if not door or not door:IsA("Model") then return end
+    if not door.PrimaryPart then return end
+    
+    -- Check if this door already has ESP
+    if escapeDoorHighlights[door] or escapeDoorBillboards[door] then return end
+
+    -- Create visual elements
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(0, 255, 0)  -- Green for escape
+    highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Parent = door
+    escapeDoorHighlights[door] = highlight
+
+    -- Add a floating text label
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "ESCAPE DOOR"
+    label.TextColor3 = Color3.fromRGB(0, 255, 0)
+    label.TextSize = 14
+    label.Font = Enum.Font.Oswald
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Parent = billboard
+    billboard.Parent = door
+    escapeDoorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        escapeDoorHighlights[door] = nil
+        escapeDoorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    escapeDoorConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then cleanup() end
+    end)
+end
+
+local function SetupEscapeDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(escapeDoorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(escapeDoorHighlights)
+    
+    for door, billboard in pairs(escapeDoorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(escapeDoorBillboards)
+    
+    for door, conn in pairs(escapeDoorConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(escapeDoorConnections)
+
+    if not escapeDoorESPEnabled then return end
+
+    -- Check existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end
+
+    -- Monitor for new doors
+    escapeDoorConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end)
+end
+
+Main:Toggle({
+    Title = "ESP Escape Doors",
+    Desc = "Highlights escape doors in Hide and Seek",
+    Value = false,
+    Callback = function(state)
+        escapeDoorESPEnabled = state
+        SetupEscapeDoorESP()
+    end
+})
+
+-- Add Door ESP toggle
+local doorESPEnabled = false
+local doorESPConnections = {}
+local doorHighlights = {}
+local doorBillboards = {}
+
+local function DoorESP(door)
+    if not door:IsA("Model") or not door.PrimaryPart then return end
+    
+    -- Only target door models (adjust names as needed)
+    if not (door.Name:find("Door") or door.Name:find("door")) then return end
+
+    -- Clear existing ESP if any
+    if doorHighlights[door] then
+        doorHighlights[door]:Destroy()
+        doorHighlights[door] = nil
+    end
+    if doorBillboards[door] then
+        doorBillboards[door]:Destroy()
+        doorBillboards[door] = nil
+    end
+
+    if not doorESPEnabled then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "DoorESP"
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(255, 165, 0)  -- Orange
+    highlight.OutlineColor = Color3.fromRGB(255, 100, 0)
+    highlight.FillTransparency = 0.6
+    highlight.Parent = door
+    doorHighlights[door] = highlight
+
+    -- Show required key if available
+    local keyNeeded = door:GetAttribute("KeyNeeded") or "Unknown"
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 150, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "DOOR (Key: "..keyNeeded..")"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Parent = billboard
+    billboard.Parent = door
+    doorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        doorHighlights[door] = nil
+        doorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    doorESPConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            cleanup()
+            if doorESPConnections[door] then
+                doorESPConnections[door]:Disconnect()
+                doorESPConnections[door] = nil
             end
         end
+    end)
+end
+
+local function SetupDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(doorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(doorHighlights)
+    
+    for door, billboard in pairs(doorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(doorBillboards)
+    
+    for door, conn in pairs(doorESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(doorESPConnections)
+
+    if not doorESPEnabled then return end
+
+    -- Find existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end
+
+    -- Detect new doors
+    doorESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end)
+end
+
+Main:Toggle({
+    Title = "ESP Door and Required Key",
+    Desc = "Highlights doors and shows required key",
+    Value = false,
+    Callback = function(state)
+        doorESPEnabled = state
+        SetupDoorESP()
     end
 })
 
@@ -972,18 +1440,22 @@ Main:Toggle({
     Callback = function(state)
         autoPullEnabled = state
         if state then
-            local ReplicatedStorage = game:GetService("ReplicatedStorage")
-            local TemporaryReachedBindableRemote = ReplicatedStorage.Remotes.TemporaryReachedBindable
-            local PULL_RATE = 0.025  -- Adjust speed if needed (lower = faster pulls)
-            local VALID_PULL_DATA = {["PerfectQTE"] = true}  -- Mimics a "perfect" pull
-
             autoPullConnection = RunService.Heartbeat:Connect(function()
-                if autoPullEnabled then
-                    pcall(function()
-                        TemporaryReachedBindableRemote:FireServer(VALID_PULL_DATA)
-                        task.wait(PULL_RATE)
-                    end)
-                end
+                pcall(function()
+                    local remote = game:GetService("ReplicatedStorage"):FindFirstChild("TemporaryReachedBindable")
+                    if not remote then return end
+
+                    local args = {
+                        {
+                            PerfectQTE = true,
+                            PerfectTiming = true,
+                            Reached = true
+                        }
+                    }
+                    
+                    -- Fire the remote with perfect parameters
+                    remote:FireServer(unpack(args))
+                end)
             end)
         else
             if autoPullConnection then
@@ -1171,9 +1643,6 @@ Combat:Button({
     end
 })
 
-Combat:Section({Title = "Bannable Be Careful"})
-Combat:Divider()
-
 local bringGuardsEnabled = false
 local bringGuardsConnection
 Combat:Toggle({
@@ -1224,7 +1693,7 @@ Combat:Toggle({
 })
 
 Combat:Toggle({
-    Title = "Gun Mods",
+    Title = "MP5 Mods",
     Desc = "Improved bullets, reduced spread, faster fire",
     Value = false,
     Callback = function(state)
@@ -1245,6 +1714,227 @@ Combat:Toggle({
     end
 })
 
+Combat:Toggle({
+    Title = "Revolver Mods",
+    Desc = "Improved bullets, reduced spread, faster fire",
+    Value = false,
+    Callback = function(state)
+        local Revolver = game:GetService("ReplicatedStorage").Weapons.Guns:FindFirstChild("Revolver")
+        if Revolver then
+            if state then
+                if Revolver:FindFirstChild("MaxBullets") then Revolver.MaxBullets.Value = 5000 end
+                if Revolver:FindFirstChild("Spread") then Revolver.Spread.Value = 0 end
+                if Revolver:FindFirstChild("BulletsPerFire") then Revolver.BulletsPerFire.Value = 3 end
+                if Revolver:FindFirstChild("FireRateCD") then Revolver.FireRateCD.Value = 0 end
+            else
+                if Revolver:FindFirstChild("MaxBullets") then Revolver.MaxBullets.Value = 30 end
+                if Revolver:FindFirstChild("Spread") then Revolver.Spread.Value = 0.1 end
+                if Revolver:FindFirstChild("BulletsPerFire") then Revolver.BulletsPerFire.Value = 1 end
+                if Revolver:FindFirstChild("FireRateCD") then Revolver.FireRateCD.Value = 0.5 end
+            end
+        end
+    end
+})
+
+-- Add this to the Combat tab section
+Combat:Section({Title = "Hitbox Expander"})
+Combat:Divider()
+
+-- Hitbox variables
+local hitboxEnabled = false
+local hitboxSize = 5 -- Default size multiplier
+local hitboxTransparency = 0.7
+local hitboxColor = Color3.fromRGB(255, 0, 0)
+local hitboxConnections = {}
+local hitboxParts = {}
+
+-- Function to create/update hitbox for a guard
+local function updateHitbox(guard)
+    if not guard:IsA("Model") then return end
+    local hrp = guard:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    -- Clear existing hitbox if any
+    if hitboxParts[guard] then
+        hitboxParts[guard]:Destroy()
+        hitboxParts[guard] = nil
+    end
+    
+    if not hitboxEnabled then return end
+    
+    -- Create a new invisible part that will act as the hitbox
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "ExpandedHitbox"
+    hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+    hitbox.Transparency = hitboxTransparency
+    hitbox.Color = hitboxColor
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.Anchored = false
+    hitbox.CanCollide = false
+    hitbox.CFrame = hrp.CFrame
+    
+    -- Weld to the guard's HRP
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = hrp
+    weld.Part1 = hitbox
+    weld.Parent = hitbox
+    
+    hitbox.Parent = guard
+    hitboxParts[guard] = hitbox
+    
+    -- Make the original HRP invisible and non-collidable
+    hrp.Transparency = 1
+    hrp.CanCollide = false
+    
+    -- Cleanup when guard is removed
+    hitboxConnections[guard] = guard.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if hitboxParts[guard] then
+                hitboxParts[guard]:Destroy()
+                hitboxParts[guard] = nil
+            end
+            if hitboxConnections[guard] then
+                hitboxConnections[guard]:Disconnect()
+                hitboxConnections[guard] = nil
+            end
+            -- Restore original HRP properties if guard still exists
+            if guard.Parent then
+                if hrp then
+                    hrp.Transparency = 0
+                    hrp.CanCollide = true
+                end
+            end
+        end
+    end)
+end
+
+-- Function to setup hitboxes for all guards
+local function setupHitboxes()
+    -- Clear existing hitboxes
+    for guard, hitbox in pairs(hitboxParts) do
+        if hitbox and hitbox.Parent then
+            hitbox:Destroy()
+        end
+        -- Restore original HRP properties
+        if guard and guard.Parent then
+            local hrp = guard:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.Transparency = 0
+                hrp.CanCollide = true
+            end
+        end
+    end
+    table.clear(hitboxParts)
+    
+    for guard, conn in pairs(hitboxConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(hitboxConnections)
+
+    if not hitboxEnabled then return end
+    
+    -- Find all existing guards
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
+           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
+            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
+            updateHitbox(obj)
+        end
+    end
+    
+    -- Listen for new guards
+    hitboxConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
+           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
+            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
+            updateHitbox(obj)
+        end
+    end)
+end
+
+-- Main toggle for hitboxes
+Combat:Toggle({
+    Title = "Hitbox Expander",
+    Desc = "Makes guards easier to hit by expanding their hitbox",
+    Value = false,
+    Callback = function(state)
+        hitboxEnabled = state
+        setupHitboxes()
+    end
+})
+
+-- Hitbox customization section
+Combat:Section({Title = "Hitbox Customization"})
+Combat:Divider()
+
+-- Size slider
+Combat:Slider({
+    Title = "Hitbox Size",
+    Desc = "Adjust the size of the hitboxes (1-20)",
+    Min = 1,
+    Max = 20,
+    Default = 5,
+    Callback = function(value)
+        hitboxSize = value
+        if hitboxEnabled then
+            -- Update all existing hitboxes
+            for guard, hitbox in pairs(hitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                end
+            end
+        end
+    end
+})
+
+-- Transparency slider
+Combat:Slider({
+    Title = "Hitbox Transparency",
+    Desc = "Adjust the transparency of the hitboxes (0-1)",
+    Min = 0,
+    Max = 1,
+    Default = 0.7,
+    Precise = 2, -- Allows decimal values
+    Callback = function(value)
+        hitboxTransparency = value
+        if hitboxEnabled then
+            -- Update all existing hitboxes
+            for guard, hitbox in pairs(hitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Transparency = hitboxTransparency
+                end
+            end
+        end
+    end
+})
+
+-- Color picker
+Combat:Colorpicker({
+    Title = "Hitbox Color",
+    Default = Color3.fromRGB(255, 0, 0), -- Red
+    Callback = function(color)
+        hitboxColor = color
+        if hitboxEnabled then
+            -- Update all existing hitboxes
+            for guard, hitbox in pairs(hitboxParts) do
+                if hitbox and hitbox.Parent then
+                    hitbox.Color = hitboxColor
+                end
+            end
+        end
+    end
+})
+
+-- Auto-update when character respawns
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
+    if hitboxEnabled then
+        task.wait(1) -- Wait for character to load
+        setupHitboxes()
+    end
+end)
+
 -- Utility Tab
 Utility:Section({Title = "Power"})
 Utility:Divider()
@@ -1256,18 +1946,6 @@ Utility:Button({
         pcall(function()
             local player = game:GetService("Players").LocalPlayer
             player:SetAttribute("_EquippedPower", "PHANTOM STEP")
-        end)
-    end
-})
-
--- Sharp Shooter Button
-Utility:Button({
-    Title = "Change to Sharp Shooter",
-    Desc = "Equips the Sharp Shooter power",
-    Callback = function()
-        pcall(function()
-            local player = game:GetService("Players").LocalPlayer
-            player:SetAttribute("_EquippedPower", "Sharp Shooter")
         end)
     end
 })
@@ -1345,12 +2023,6 @@ Utility:Button({
     end
 })
 
-Utility:Button({
-    Title = "God Mode",
-    Desc = "In Progress (Fixing)",
-    Locked = true,
-})
-
 Utility:Toggle({
     Title = "Auto Skip Cutscenes",
     Desc = "Automatically skips all cutscenes and dialogue",
@@ -1391,7 +2063,6 @@ Misc:Divider()
 local lastPosition = nil
 local safeZoneFolder = nil
 
--- Enhanced SafeZone Creation Function
 local function createSafeZone()
     -- Delete existing safezone if it exists
     if safeZoneFolder then
@@ -1400,568 +2071,189 @@ local function createSafeZone()
     
     -- Create new safezone folder
     safeZoneFolder = Instance.new("Folder", workspace)
-    safeZoneFolder.Name = "SAFEZONE_MAP_ULTRA"
+    safeZoneFolder.Name = "SAFEZONEMAP"
     
-    -- Store player's last position
-    local character = LocalPlayer.Character
-    if character and character:FindFirstChild("HumanoidRootPart") then
-        lastPosition = character.HumanoidRootPart.CFrame
-    end
-    
-    -- Create natural ground foundation (using parts instead of terrain)
-    local groundSize = Vector3.new(512, 10, 512)
-    local groundPosition = Vector3.new(0, 5000, 0)
-    
-    -- Main ground part
-    local ground = Instance.new("Part", safeZoneFolder)
-    ground.Name = "GrassBase"
-    ground.Size = groundSize
-    ground.Position = groundPosition + Vector3.new(0, 5, 0)
-    ground.Anchored = true
-    ground.CanCollide = true
-    ground.Material = Enum.Material.Grass
-    ground.Color = Color3.fromRGB(34, 139, 34)
-    
-    -- Create natural-looking ground variation
-    local function createGroundPatch(position, size, material, color)
-        local patch = Instance.new("Part", safeZoneFolder)
-        patch.Size = size
-        patch.Position = position
-        patch.Anchored = true
-        patch.CanCollide = true
-        patch.Material = material
-        patch.Color = color
-        return patch
-    end
-    
-    -- Add sandy patches
-    for i = 1, 5 do
-        createGroundPatch(
-            groundPosition + Vector3.new(math.random(-200, 200), 5, math.random(-200, 200)),
-            Vector3.new(math.random(30, 80), 5, math.random(30, 80)),
-            Enum.Material.Sand,
-            Color3.fromRGB(194, 178, 128)
-        )
-    end
-    
-    -- Add rocky patches
-    for i = 1, 5 do
-        createGroundPatch(
-            groundPosition + Vector3.new(math.random(-200, 200), 5, math.random(-200, 200)),
-            Vector3.new(math.random(20, 60), math.random(5, 15), math.random(20, 60)),
-            Enum.Material.Slate,
-            Color3.fromRGB(100, 100, 100)
-        )
-    end
-    
-    -- Water area (using blue parts instead of terrain water)
-    local water = Instance.new("Part", safeZoneFolder)
-    water.Name = "Water"
-    water.Size = Vector3.new(100, 5, 100)
-    water.Position = groundPosition + Vector3.new(0, 10, 0)
-    water.Anchored = true
-    water.CanCollide = false
-    water.Transparency = 0.7
-    water.Material = Enum.Material.Glass
-    water.Color = Color3.fromRGB(0, 150, 255)
-    
-    -- Add water waves effect
-    local wave1 = Instance.new("Part", water)
-    wave1.Size = Vector3.new(100, 0.5, 100)
-    wave1.Position = water.Position + Vector3.new(0, 0.5, 0)
-    wave1.Anchored = true
-    wave1.CanCollide = false
-    wave1.Transparency = 0.8
-    wave1.Material = Enum.Material.Glass
-    wave1.Color = Color3.fromRGB(0, 180, 255)
-    
-    -- Main safe area (wooden platform with amenities)
+    -- Create main platform (thicker to prevent glitching)
     local platform = Instance.new("Part", safeZoneFolder)
-    platform.Name = "MainPlatform"
-    platform.Size = Vector3.new(60, 2, 60)
-    platform.Position = Vector3.new(0, 5000 + 30, 0)
+    platform.Name = "SafePlatform"
+    platform.Size = Vector3.new(100, 5, 100) -- Thicker (5 studs tall)
+    platform.Position = Vector3.new(0, 5000, 0) -- Still far away
     platform.Anchored = true
     platform.CanCollide = true
-    platform.Material = Enum.Material.WoodPlanks
-    platform.Color = Color3.fromRGB(150, 100, 70)
+    platform.Material = Enum.Material.Slate
+    platform.Color = Color3.fromRGB(150, 150, 150)
     
-    -- Add wooden texture to platform
-    local texture = Instance.new("Texture", platform)
-    texture.Texture = "rbxassetid://1290034958" -- Wood texture
-    texture.Face = Enum.NormalId.Top
-    texture.StudsPerTileU = 2
-    texture.StudsPerTileV = 2
-    
-    -- Add wooden border around platform
-    local border = Instance.new("Part", safeZoneFolder)
-    border.Name = "PlatformBorder"
-    border.Size = Vector3.new(62, 1, 62)
-    border.Position = platform.Position + Vector3.new(0, 1, 0)
-    border.Anchored = true
-    border.CanCollide = true
-    border.Material = Enum.Material.Wood
-    border.Color = Color3.fromRGB(120, 80, 50)
-    
-    -- Protective walls with windows
-    local wallHeight = 15
+    -- Add protective wooden walls around the edges
+    local wallHeight = 20
     local wallThickness = 2
     
-    -- North wall with window
+    -- North wall
     local northWall = Instance.new("Part", safeZoneFolder)
-    northWall.Name = "NorthWall"
-    northWall.Size = Vector3.new(60 + wallThickness*2, wallHeight, wallThickness)
-    northWall.Position = platform.Position + Vector3.new(0, wallHeight/2, 30 + wallThickness/2)
+    northWall.Size = Vector3.new(100 + wallThickness*2, wallHeight, wallThickness)
+    northWall.Position = platform.Position + Vector3.new(0, wallHeight/2, 50 + wallThickness/2)
     northWall.Anchored = true
     northWall.CanCollide = true
-    northWall.Material = Enum.Material.Wood
-    northWall.Color = Color3.fromRGB(120, 80, 50)
+    northWall.Material = Enum.Material.WoodPlanks
+    northWall.Color = Color3.fromRGB(102, 70, 42)
     
-    -- Window in north wall
-    local northWindow = Instance.new("Part", safeZoneFolder)
-    northWindow.Name = "NorthWindow"
-    northWindow.Size = Vector3.new(15, 8, 1)
-    northWindow.Position = northWall.Position + Vector3.new(0, 0, 0.5)
-    northWindow.Anchored = true
-    northWindow.CanCollide = false
-    northWindow.Transparency = 0.7
-    northWindow.Material = Enum.Material.Glass
-    northWindow.Color = Color3.fromRGB(200, 230, 255)
+    -- South wall
+    local southWall = northWall:Clone()
+    southWall.Parent = safeZoneFolder
+    southWall.Position = platform.Position + Vector3.new(0, wallHeight/2, -50 - wallThickness/2)
     
-    -- South wall with door
-    local southWall1 = Instance.new("Part", safeZoneFolder)
-    southWall1.Name = "SouthWallLeft"
-    southWall1.Size = Vector3.new(25, wallHeight, wallThickness)
-    southWall1.Position = platform.Position + Vector3.new(-17.5, wallHeight/2, -30 - wallThickness/2)
-    southWall1.Anchored = true
-    southWall1.CanCollide = true
-    southWall1.Material = northWall.Material
-    southWall1.Color = northWall.Color
-    
-    local southWall2 = southWall1:Clone()
-    southWall2.Name = "SouthWallRight"
-    southWall2.Position = platform.Position + Vector3.new(17.5, wallHeight/2, -30 - wallThickness/2)
-    southWall2.Parent = safeZoneFolder
-    
-    -- Wooden door
-    local door = Instance.new("Part", safeZoneFolder)
-    door.Name = "MainDoor"
-    door.Size = Vector3.new(10, 12, 1)
-    door.Position = platform.Position + Vector3.new(0, 6, -30)
-    door.Anchored = true
-    door.CanCollide = true
-    door.Material = Enum.Material.Wood
-    door.Color = Color3.fromRGB(100, 60, 30)
-    
-    -- Door texture
-    local doorTexture = Instance.new("Texture", door)
-    doorTexture.Texture = "rbxassetid://1290034958" -- Wood texture
-    doorTexture.Face = Enum.NormalId.Front
-    doorTexture.StudsPerTileU = 1
-    doorTexture.StudsPerTileV = 1
-    
-    -- Door handle
-    local handle = Instance.new("Part", safeZoneFolder)
-    handle.Name = "DoorHandle"
-    handle.Size = Vector3.new(0.5, 0.5, 1)
-    handle.Position = door.Position + Vector3.new(4, 0, 0.5)
-    handle.Anchored = true
-    handle.CanCollide = true
-    handle.Material = Enum.Material.Metal
-    handle.Color = Color3.fromRGB(200, 200, 200)
-    
-    -- East wall with window
+    -- East wall
     local eastWall = Instance.new("Part", safeZoneFolder)
-    eastWall.Name = "EastWall"
-    eastWall.Size = Vector3.new(wallThickness, wallHeight, 60)
-    eastWall.Position = platform.Position + Vector3.new(30 + wallThickness/2, wallHeight/2, 0)
+    eastWall.Size = Vector3.new(wallThickness, wallHeight, 100)
+    eastWall.Position = platform.Position + Vector3.new(50 + wallThickness/2, wallHeight/2, 0)
     eastWall.Anchored = true
     eastWall.CanCollide = true
-    eastWall.Material = northWall.Material
+    eastWall.Material = Enum.Material.WoodPlanks
     eastWall.Color = northWall.Color
+    eastWall.Parent = safeZoneFolder
     
-    -- Window in east wall
-    local eastWindow = northWindow:Clone()
-    eastWindow.Name = "EastWindow"
-    eastWindow.Position = eastWall.Position + Vector3.new(0.5, 0, 0)
-    eastWindow.Rotation = Vector3.new(0, 90, 0)
-    eastWindow.Parent = safeZoneFolder
-    
-    -- West wall with window
+    -- West wall
     local westWall = eastWall:Clone()
-    westWall.Name = "WestWall"
-    westWall.Position = platform.Position + Vector3.new(-30 - wallThickness/2, wallHeight/2, 0)
     westWall.Parent = safeZoneFolder
+    westWall.Position = platform.Position + Vector3.new(-50 - wallThickness/2, wallHeight/2, 0)
     
-    -- Window in west wall
-    local westWindow = eastWindow:Clone()
-    westWindow.Name = "WestWindow"
-    westWindow.Position = westWall.Position + Vector3.new(-0.5, 0, 0)
-    westWindow.Parent = safeZoneFolder
+    -- Add wooden border (decorative)
+    local border = Instance.new("Part", safeZoneFolder)
+    border.Size = Vector3.new(104, 1, 104)
+    border.Position = platform.Position + Vector3.new(0, 2.5, 0)
+    border.Anchored = true
+    border.CanCollide = true
+    border.Material = Enum.Material.WoodPlanks
+    border.Color = Color3.fromRGB(102, 70, 42)
     
-    -- Roof with overhang
-    local roof = Instance.new("Part", safeZoneFolder)
-    roof.Name = "Roof"
-    roof.Size = Vector3.new(70, 1, 70)
-    roof.Position = platform.Position + Vector3.new(0, wallHeight, 0)
-    roof.Anchored = true
-    roof.CanCollide = true
-    roof.Material = Enum.Material.WoodPlanks
-    roof.Color = Color3.fromRGB(100, 70, 40)
+    -- Add some grass patches (on top of the platform)
+    local grassColors = {
+        Color3.fromRGB(34, 139, 34),
+        Color3.fromRGB(0, 100, 0),
+        Color3.fromRGB(50, 205, 50)
+    }
     
-    -- Roof texture
-    local roofTexture = Instance.new("Texture", roof)
-    roofTexture.Texture = "rbxassetid://1290034958" -- Wood texture
-    roofTexture.Face = Enum.NormalId.Top
-    roofTexture.StudsPerTileU = 2
-    roofTexture.StudsPerTileV = 2
-    
-    -- Interior decorations
-    -- Wooden table
-    local tableTop = Instance.new("Part", safeZoneFolder)
-    tableTop.Name = "TableTop"
-    tableTop.Size = Vector3.new(10, 1, 5)
-    tableTop.Position = platform.Position + Vector3.new(0, 3, 0)
-    tableTop.Anchored = true
-    tableTop.CanCollide = true
-    tableTop.Material = Enum.Material.Wood
-    tableTop.Color = Color3.fromRGB(139, 69, 19)
-    
-    -- Table legs
-    for i = -1, 1, 2 do
-        for j = -1, 1, 2 do
-            local leg = Instance.new("Part", safeZoneFolder)
-            leg.Name = "TableLeg"
-            leg.Size = Vector3.new(1, 2, 1)
-            leg.Position = tableTop.Position + Vector3.new(i*4.5, -1.5, j*2)
-            leg.Anchored = true
-            leg.CanCollide = true
-            leg.Material = Enum.Material.Wood
-            leg.Color = tableTop.Color
+    for i = 1, 15 do
+        local grassPatch = Instance.new("Part", safeZoneFolder)
+        grassPatch.Size = Vector3.new(math.random(8, 15), 0.5, math.random(8, 15))
+        grassPatch.Position = platform.Position + Vector3.new(
+            math.random(-40, 40),
+            2.6, -- On top of platform
+            math.random(-40, 40)
+        )
+        grassPatch.Anchored = true
+        grassPatch.CanCollide = false
+        grassPatch.Material = Enum.Material.Grass
+        grassPatch.Color = grassColors[math.random(1, #grassColors)]
+        
+        -- Add some small rocks
+        if math.random() > 0.7 then
+            local rock = Instance.new("Part", safeZoneFolder)
+            rock.Size = Vector3.new(math.random(2, 4), math.random(1, 2), math.random(2, 4))
+            rock.Position = grassPatch.Position + Vector3.new(0, 0.5, 0)
+            rock.Anchored = true
+            rock.CanCollide = true
+            rock.Material = Enum.Material.Slate
+            rock.Color = Color3.fromRGB(100, 100, 100)
         end
     end
     
-    -- Chairs around table
+    -- Add a cozy chair
+    local chair = Instance.new("Part", safeZoneFolder)
+    chair.Name = "Chair"
+    chair.Size = Vector3.new(4, 3, 4)
+    chair.Position = platform.Position + Vector3.new(20, 2.5, 0)
+    chair.Anchored = true
+    chair.CanCollide = true
+    chair.Material = Enum.Material.Wood
+    chair.Color = Color3.fromRGB(139, 69, 19) -- Brown
+    
+    -- Chair backrest
+    local backrest = Instance.new("Part", safeZoneFolder)
+    backrest.Size = Vector3.new(4, 6, 0.5)
+    backrest.Position = chair.Position + Vector3.new(0, 3, -2)
+    backrest.Anchored = true
+    backrest.CanCollide = true
+    backrest.Material = Enum.Material.Wood
+    backrest.Color = chair.Color
+    
+    -- Add some trees
     for i = 1, 4 do
-        local angle = (i-1) * math.pi/2
-        local chair = Instance.new("Part", safeZoneFolder)
-        chair.Name = "Chair"..i
-        chair.Size = Vector3.new(3, 3, 3)
-        chair.Position = tableTop.Position + Vector3.new(math.cos(angle)*6, 1.5, math.sin(angle)*4)
-        chair.Anchored = true
-        chair.CanCollide = true
-        chair.Material = Enum.Material.Wood
-        chair.Color = Color3.fromRGB(160, 90, 50)
+        local treePos = platform.Position + Vector3.new(
+            math.random(-35, 35),
+            0,
+            math.random(-35, 35)
+        )
         
-        -- Chair back
-        local chairBack = Instance.new("Part", safeZoneFolder)
-        chairBack.Name = "ChairBack"..i
-        chairBack.Size = Vector3.new(3, 6, 0.5)
-        chairBack.Position = chair.Position + Vector3.new(math.cos(angle)*1.5, 3, math.sin(angle)*1.5)
-        chairBack.Anchored = true
-        chairBack.CanCollide = true
-        chairBack.Material = Enum.Material.Wood
-        chairBack.Color = chair.Color
+        -- Tree trunk
+        local trunk = Instance.new("Part", safeZoneFolder)
+        trunk.Size = Vector3.new(3, 10, 3)
+        trunk.Position = treePos + Vector3.new(0, 5, 0)
+        trunk.Anchored = true
+        trunk.CanCollide = true
+        trunk.Material = Enum.Material.Wood
+        trunk.Color = Color3.fromRGB(101, 67, 33)
+        
+        -- Tree leaves
+        local leaves = Instance.new("Part", safeZoneFolder)
+        leaves.Size = Vector3.new(12, 8, 12)
+        leaves.Position = trunk.Position + Vector3.new(0, 8, 0)
+        leaves.Anchored = true
+        leaves.CanCollide = true
+        leaves.Material = Enum.Material.Sand
+        leaves.Color = Color3.fromRGB(34, 139, 34)
+        leaves.Shape = Enum.PartType.Ball
     end
     
-    -- Campfire area outside
-    local firePit = Instance.new("Part", safeZoneFolder)
-    firePit.Name = "FirePit"
-    firePit.Size = Vector3.new(8, 1, 8)
-    firePit.Position = platform.Position + Vector3.new(0, 0, -40)
-    firePit.Anchored = true
-    firePit.CanCollide = true
-    firePit.Material = Enum.Material.Slate
-    firePit.Color = Color3.fromRGB(80, 80, 80)
+    -- Add a campfire
+    local fireBase = Instance.new("Part", safeZoneFolder)
+    fireBase.Size = Vector3.new(6, 1, 6)
+    fireBase.Position = platform.Position + Vector3.new(-20, 2.6, 0)
+    fireBase.Anchored = true
+    fireBase.CanCollide = true
+    fireBase.Material = Enum.Material.Slate
+    fireBase.Color = Color3.fromRGB(80, 80, 80)
     
-    -- Fire stones
-    for angle = 0, math.pi*2, math.pi/4 do
-        local stone = Instance.new("Part", safeZoneFolder)
-        stone.Name = "FireStone"
-        stone.Size = Vector3.new(1, math.random(1,2), 1)
-        stone.Position = firePit.Position + Vector3.new(math.cos(angle)*4, 0.5, math.sin(angle)*4)
-        stone.Anchored = true
-        stone.CanCollide = true
-        stone.Material = Enum.Material.Slate
-        stone.Color = Color3.fromRGB(100, 100, 100)
-    end
-    
-    -- Actual fire
-    local fire = Instance.new("Fire", firePit)
-    fire.Name = "CampFire"
-    fire.Size = 6
-    fire.Heat = 15
+    -- Actual fire effect
+    local fire = Instance.new("Fire", fireBase)
+    fire.Heat = 10
+    fire.Size = 5
     fire.Color = Color3.new(1, 0.5, 0.1)
     fire.SecondaryColor = Color3.new(1, 0.8, 0)
     
-    -- Fire light
-    local fireLight = Instance.new("PointLight", firePit)
-    fireLight.Name = "FireLight"
-    fireLight.Brightness = 10
-    fireLight.Range = 20
-    fireLight.Color = Color3.new(1, 0.6, 0.3)
+    -- Add subtle lighting
+    local light = Instance.new("PointLight", fireBase)
+    light.Brightness = 5
+    light.Range = 20
+    light.Color = Color3.new(1, 0.6, 0.3)
     
-    -- Fire crackling sound
-    local fireSound = Instance.new("Sound", firePit)
-    fireSound.Name = "FireSound"
-    fireSound.SoundId = "rbxassetid://130976108"
-    fireSound.Looped = true
-    fireSound.Volume = 0.5
-    fireSound:Play()
-    
-    -- Log seats around fire
-    for i = 1, 4 do
-        local angle = (i-1) * math.pi/2
-        local log = Instance.new("Part", safeZoneFolder)
-        log.Name = "LogSeat"..i
-        log.Size = Vector3.new(6, 1.5, 1.5)
-        log.Position = firePit.Position + Vector3.new(math.cos(angle)*8, 0.75, math.sin(angle)*8)
-        log.Anchored = true
-        log.CanCollide = true
-        log.Material = Enum.Material.Wood
-        log.Color = Color3.fromRGB(101, 67, 33)
-        log.Rotation = Vector3.new(0, angle * 180/math.pi, 0)
-    end
-    
-    -- Sleeping area
-    local bed = Instance.new("Part", safeZoneFolder)
-    bed.Name = "Bed"
-    bed.Size = Vector3.new(10, 2, 6)
-    bed.Position = platform.Position + Vector3.new(20, 1, 0)
-    bed.Anchored = true
-    bed.CanCollide = true
-    bed.Material = Enum.Material.Fabric
-    bed.Color = Color3.fromRGB(200, 150, 150)
-    
-    -- Pillow
-    local pillow = Instance.new("Part", safeZoneFolder)
-    pillow.Name = "Pillow"
-    pillow.Size = Vector3.new(3, 1, 2)
-    pillow.Position = bed.Position + Vector3.new(3.5, 1.5, 0)
-    pillow.Anchored = true
-    pillow.CanCollide = true
-    pillow.Material = Enum.Material.Fabric
-    pillow.Color = Color3.fromRGB(255, 255, 255)
-    
-    -- Blanket
-    local blanket = Instance.new("Part", safeZoneFolder)
-    blanket.Name = "Blanket"
-    blanket.Size = Vector3.new(8, 0.5, 5)
-    blanket.Position = bed.Position + Vector3.new(0, 1.25, 0)
-    blanket.Anchored = true
-    blanket.CanCollide = true
-    blanket.Material = Enum.Material.Fabric
-    blanket.Color = Color3.fromRGB(150, 100, 100)
-    
-    -- Storage chest
-    local chest = Instance.new("Part", safeZoneFolder)
-    chest.Name = "StorageChest"
-    chest.Size = Vector3.new(6, 4, 4)
-    chest.Position = platform.Position + Vector3.new(-20, 2, 0)
-    chest.Anchored = true
-    chest.CanCollide = true
-    chest.Material = Enum.Material.Wood
-    chest.Color = Color3.fromRGB(120, 80, 50)
-    
-    -- Chest lid
-    local chestLid = Instance.new("Part", safeZoneFolder)
-    chestLid.Name = "ChestLid"
-    chestLid.Size = Vector3.new(6, 0.5, 4)
-    chestLid.Position = chest.Position + Vector3.new(0, 2.25, 2)
-    chestLid.Anchored = true
-    chestLid.CanCollide = true
-    chestLid.Material = chest.Material
-    chestLid.Color = chest.Color
-    chestLid.Rotation = Vector3.new(-30, 0, 0)
-    
-    -- Chest lock
-    local chestLock = Instance.new("Part", safeZoneFolder)
-    chestLock.Name = "ChestLock"
-    chestLock.Size = Vector3.new(1, 1, 0.5)
-    chestLock.Position = chest.Position + Vector3.new(0, 1, 2)
-    chestLock.Anchored = true
-    chestLock.CanCollide = true
-    chestLock.Material = Enum.Material.Metal
-    chestLock.Color = Color3.fromRGB(150, 150, 150)
-    
-    -- Weapon rack
-    local weaponRack = Instance.new("Part", safeZoneFolder)
-    weaponRack.Name = "WeaponRack"
-    weaponRack.Size = Vector3.new(8, 6, 1)
-    weaponRack.Position = platform.Position + Vector3.new(0, 3, 20)
-    weaponRack.Anchored = true
-    weaponRack.CanCollide = true
-    weaponRack.Material = Enum.Material.Wood
-    weaponRack.Color = Color3.fromRGB(100, 70, 40)
-    
-    -- Weapon rack hooks
-    for i = -1, 1, 0.5 do
-        local hook = Instance.new("Part", safeZoneFolder)
-        hook.Name = "WeaponHook"
-        hook.Size = Vector3.new(0.5, 0.5, 1)
-        hook.Position = weaponRack.Position + Vector3.new(i*6, 0, 0.5)
-        hook.Anchored = true
-        hook.CanCollide = true
-        hook.Material = Enum.Material.Metal
-        hook.Color = Color3.fromRGB(150, 150, 150)
-    end
-    
-    -- Fake weapons on rack
-    local sword = Instance.new("Part", safeZoneFolder)
-    sword.Name = "Sword"
-    sword.Size = Vector3.new(0.5, 5, 0.5)
-    sword.Position = weaponRack.Position + Vector3.new(0, 0, 1)
-    sword.Anchored = true
-    sword.CanCollide = true
-    sword.Material = Enum.Material.Metal
-    sword.Color = Color3.fromRGB(200, 200, 200)
-    
-    -- Ambient lighting
-    local lighting = game:GetService("Lighting")
-    
-    -- Save original lighting
-    if not getgenv().originalLighting then
-        getgenv().originalLighting = {
-            Ambient = lighting.Ambient,
-            Brightness = lighting.Brightness,
-            ColorShift_Bottom = lighting.ColorShift_Bottom,
-            ColorShift_Top = lighting.ColorShift_Top,
-            OutdoorAmbient = lighting.OutdoorAmbient,
-            FogColor = lighting.FogColor,
-            FogEnd = lighting.FogEnd,
-            FogStart = lighting.FogStart
-        }
-    end
-    
-    -- Set safezone lighting (sunset effect)
-    lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
-    lighting.Brightness = 2
-    lighting.ColorShift_Bottom = Color3.new(0, 0, 0)
-    lighting.ColorShift_Top = Color3.new(0, 0, 0)
-    lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-    lighting.FogColor = Color3.new(0.8, 0.7, 0.5)
-    lighting.FogEnd = 1000
-    lighting.FogStart = 500
-    
-    -- Skybox (sunset)
-    local skybox = Instance.new("Sky", safeZoneFolder)
-    skybox.SkyboxBk = "rbxassetid://6016555593"
-    skybox.SkyboxDn = "rbxassetid://6016555593"
-    skybox.SkyboxFt = "rbxassetid://6016555593"
-    skybox.SkyboxLf = "rbxassetid://6016555593"
-    skybox.SkyboxRt = "rbxassetid://6016555593"
-    skybox.SkyboxUp = "rbxassetid://6016555593"
-    skybox.CelestialBodiesShown = true
-    skybox.SunAngularSize = 21
-    
-    -- Ambient nature sounds
-    local ambientSound = Instance.new("Sound", safeZoneFolder)
-    ambientSound.Name = "AmbientNatureSound"
-    ambientSound.SoundId = "rbxassetid://130976108" -- Forest ambient sound
-    ambientSound.Looped = true
-    ambientSound.Volume = 0.5
-    ambientSound:Play()
-    
-    -- Birds chirping sounds (random intervals)
-    local birdsSound = Instance.new("Sound", safeZoneFolder)
-    birdsSound.Name = "BirdsChirping"
-    birdsSound.SoundId = "rbxassetid://130976108"
-    birdsSound.Looped = false
-    birdsSound.Volume = 0.3
-    
-    -- Function to play birds at random intervals
-    local function playBirds()
-        while safeZoneFolder and safeZoneFolder.Parent do
-            birdsSound:Play()
-            task.wait(math.random(10, 30))
-        end
-    end
-    
-    -- Start bird sounds
-    task.spawn(playBirds)
-    
-    -- Wind sound
-    local windSound = Instance.new("Sound", safeZoneFolder)
-    windSound.Name = "WindSound"
-    windSound.SoundId = "rbxassetid://130976108"
-    windSound.Looped = true
-    windSound.Volume = 0.2
-    windSound:Play()
-    
-    -- Spawn position (on platform near door)
-    return platform.Position + Vector3.new(0, 5, -25)
+    -- Spawn position (near the chair, above platform)
+    return platform.Position + Vector3.new(20, 7, 0)
 end
 
--- Updated Teleport to SafeZone Button
 Misc:Button({
     Title = "Teleport to SafeZone",
     Desc = "Teleports you to a safezone",
     Callback = function()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") then
-            -- Store last position
             lastPosition = character.HumanoidRootPart.CFrame
-            
-            -- Create safezone and get spawn position
             local safeZonePos = createSafeZone()
-            
-            -- Teleport player
             character.HumanoidRootPart.CFrame = CFrame.new(safeZonePos)
-            
-            -- Notify player
-            WindUI:Notify({
-                Title = "SafeZone",
-                Desc = "You've been teleported to a safezone",
-                Duration = 5
-            })
-        else
-            WindUI:Notify({
-                Title = "Error",
-                Desc = "Character not found or HumanoidRootPart missing",
-                Duration = 5,
-                Variant = "Error"
-            })
         end
     end
 })
 
--- Updated Teleport Back Button
 Misc:Button({
     Title = "Teleport Back",
-    Desc = "Returns you to where you were before safezone",
+    Desc = "Returns you to where you were",
     Callback = function()
         local character = LocalPlayer.Character
         if character and character:FindFirstChild("HumanoidRootPart") and lastPosition then
-            -- Teleport back
             character.HumanoidRootPart.CFrame = lastPosition
-            
-            -- Clean up safezone
             if safeZoneFolder then
-                -- Restore original lighting
-                local lighting = game:GetService("Lighting")
-                if getgenv().originalLighting then
-                    for property, value in pairs(getgenv().originalLighting) do
-                        lighting[property] = value
-                    end
-                end
-                
-                -- Destroy safezone
                 safeZoneFolder:Destroy()
                 safeZoneFolder = nil
             end
-            
-            -- Notify player
-            WindUI:Notify({
-                Title = "SafeZone",
-                Desc = "You've been teleported back",
-                Duration = 5
-            })
-        else
-            WindUI:Notify({
-                Title = "Error",
-                Desc = "No position stored or character issue",
-                Duration = 5,
-                Variant = "Error"
-            })
         end
     end
 })
@@ -2144,5 +2436,269 @@ Misc:Toggle({
                 end
             end
         end
+    end
+})
+
+-- Visual Tab
+Visual:Section({Title = "ESP"})
+Visual:Divider()
+
+-- ESP Players
+local playerESPEnabled = false
+local playerESPConnections = {}
+local playerHighlights = {}
+local playerBillboards = {}
+
+local function CreatePlayerESP(player)
+    if not player.Character then return end
+
+    -- Clear existing ESP if any
+    if playerHighlights[player] then
+        playerHighlights[player]:Destroy()
+        playerHighlights[player] = nil
+    end
+    if playerBillboards[player] then
+        playerBillboards[player]:Destroy()
+        playerBillboards[player] = nil
+    end
+
+    if not playerESPEnabled then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "PlayerESP"
+    highlight.Adornee = player.Character
+    highlight.FillColor = Color3.fromRGB(0, 170, 255)  -- Blue
+    highlight.OutlineColor = Color3.fromRGB(0, 100, 255)
+    highlight.FillTransparency = 0.5
+    highlight.Parent = player.Character
+    playerHighlights[player] = highlight
+
+    -- Floating text with health
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = player.Character:WaitForChild("Head")
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = player.Name .. " (HP: 100)"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Parent = billboard
+    billboard.Parent = player.Character
+    playerBillboards[player] = billboard
+
+    -- Update health display
+    local healthConnection
+    if player.Character:FindFirstChild("Humanoid") then
+        healthConnection = player.Character.Humanoid.HealthChanged:Connect(function(health)
+            label.Text = player.Name .. " (HP: " .. math.floor(health) .. ")"
+        end)
+    end
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        if healthConnection then
+            healthConnection:Disconnect()
+        end
+        playerHighlights[player] = nil
+        playerBillboards[player] = nil
+    end
+
+    -- Track character changes
+    playerESPConnections[player] = player.CharacterAdded:Connect(function(newChar)
+        cleanup()
+        CreatePlayerESP(player)  -- Recreate for new character
+    end)
+
+    -- Auto-cleanup when player leaves
+    playerESPConnections[player.."Removing"] = player.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            cleanup()
+            if playerESPConnections[player] then
+                playerESPConnections[player]:Disconnect()
+                playerESPConnections[player] = nil
+            end
+        end
+    end)
+end
+
+local function SetupPlayerESP()
+    -- Clear existing ESP
+    for player, highlight in pairs(playerHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(playerHighlights)
+    
+    for player, billboard in pairs(playerBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(playerBillboards)
+    
+    for player, conn in pairs(playerESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(playerESPConnections)
+
+    if not playerESPEnabled then return end
+
+    -- Initialize for all players
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then  -- Skip local player
+            CreatePlayerESP(player)
+        end
+    end
+
+    -- Track new players
+    playerESPConnections.playerAdded = Players.PlayerAdded:Connect(function(player)
+        CreatePlayerESP(player)
+    end)
+end
+
+Visual:Toggle({
+    Title = "ESP Players",
+    Desc = "Highlights all players with health display",
+    Value = false,
+    Callback = function(state)
+        playerESPEnabled = state
+        SetupPlayerESP()
+    end
+})
+
+-- ESP Guards
+local guardESPEnabled = false
+local guardESPConnections = {}
+local guardHighlights = {}
+local guardBillboards = {}
+
+local function CreateGuardESP(guardModel)
+    if not guardModel:FindFirstChild("Humanoid") then return end
+
+    -- Clear existing ESP if any
+    if guardHighlights[guardModel] then
+        guardHighlights[guardModel]:Destroy()
+        guardHighlights[guardModel] = nil
+    end
+    if guardBillboards[guardModel] then
+        guardBillboards[guardModel]:Destroy()
+        guardBillboards[guardModel] = nil
+    end
+
+    if not guardESPEnabled then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "GuardESP"
+    highlight.Adornee = guardModel
+    highlight.FillColor = Color3.fromRGB(255, 100, 0)  -- Orange
+    highlight.OutlineColor = Color3.fromRGB(200, 50, 0)
+    highlight.FillTransparency = 0.4
+    highlight.Parent = guardModel
+    guardHighlights[guardModel] = highlight
+
+    -- Floating text
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = guardModel:WaitForChild("Head")
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "GUARD"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Parent = billboard
+    billboard.Parent = guardModel
+    guardBillboards[guardModel] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        guardHighlights[guardModel] = nil
+        guardBillboards[guardModel] = nil
+    end
+
+    -- Auto-remove when guard dies
+    guardESPConnections[guardModel] = guardModel.Humanoid.Died:Connect(cleanup)
+
+    -- Auto-remove when guard is removed
+    guardESPConnections[guardModel.."Removing"] = guardModel.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            cleanup()
+            if guardESPConnections[guardModel] then
+                guardESPConnections[guardModel]:Disconnect()
+                guardESPConnections[guardModel] = nil
+            end
+        end
+    end)
+end
+
+local function SetupGuardESP()
+    -- Clear existing ESP
+    for guard, highlight in pairs(guardHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(guardHighlights)
+    
+    for guard, billboard in pairs(guardBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(guardBillboards)
+    
+    for guard, conn in pairs(guardESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(guardESPConnections)
+
+    if not guardESPEnabled then return end
+
+    -- Find existing guards
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj.Name:lower():find("guard") then
+            CreateGuardESP(obj)
+        end
+    end
+
+    -- Detect new guards
+    guardESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj.Name:lower():find("guard") then
+            CreateGuardESP(obj)
+        end
+    end)
+end
+
+Visual:Toggle({
+    Title = "ESP Guards",
+    Desc = "Highlights all guards in the game",
+    Value = false,
+    Callback = function(state)
+        guardESPEnabled = state
+        SetupGuardESP()
     end
 })
