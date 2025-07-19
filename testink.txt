@@ -6,7 +6,6 @@ if not success then
     warn("Failed to load WindUI:", WindUI)
     return
 end
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
