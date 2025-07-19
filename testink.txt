@@ -470,10 +470,11 @@ Main:Toggle({
 
 local saveInjuredEnabled = false
 local saveInjuredConnection
+local savedPlayers = {} -- Track which players we've already saved
 
 local function FindInjuredPlayer()
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
+        if player ~= LocalPlayer and player.Character and not savedPlayers[player] then
             local hrp = player.Character:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local prompt = hrp:FindFirstChild("CarryPrompt")
@@ -483,6 +484,9 @@ local function FindInjuredPlayer()
             end
         end
     end
+    -- If no new injured players found, reset the savedPlayers table
+    table.clear(savedPlayers)
+    return FindInjuredPlayer() -- Try again with fresh list
 end
 
 local function TransportInjuredPlayer()
@@ -494,35 +498,41 @@ local function TransportInjuredPlayer()
 
     -- Step 1: Teleport to injured player
     char:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
-    task.wait(0.5)
+    task.wait(0.4)
     
-    -- Step 2: Fire the carry prompt
-    fireproximityprompt(prompt)
-    task.wait(1)
+    -- Step 2: Fire the carry prompt instantly
+    fireproximityprompt(prompt, 0)
+    task.wait(0.2)
     
     -- Step 3: Teleport to finish location
     char:PivotTo(CFrame.new(-100.8, 1030, 115))
-    task.wait(1)
+    task.wait(0.3)
     
-    -- Step 4: Release player
+    -- Step 4: Release player instantly
     game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
-    task.wait(0.5)
+    task.wait(0.1)
+    
+    -- Mark player as saved
+    savedPlayers[injuredPlayer] = true
 end
 
 local function AutoSaveInjured()
     while saveInjuredEnabled do
         TransportInjuredPlayer()
-        task.wait(2)
+        task.wait(0.5) -- Reduced overall cycle time
     end
+    -- Clear saved players when disabled
+    table.clear(savedPlayers)
 end
 
 Main:Toggle({
-    Title = "Save Injured Players",
-    Desc = "Automatically carries injured players to safety",
+    Title = "Help Injured Players",
+    Desc = "Carries injured players to safety",
     Value = false,
     Callback = function(state)
         saveInjuredEnabled = state
         if state then
+            table.clear(savedPlayers) -- Clear any previous saved players
             coroutine.wrap(AutoSaveInjured)()
         end
     end
@@ -735,7 +745,7 @@ end
 
 
 Main:Toggle({
-    Title = "Crack Immunity",
+    Title = "Crack Immunity (Buggy)",
     Desc = "Prevents your Dalgona from cracking",
     Value = false,
     Callback = function(state)
@@ -2111,78 +2121,115 @@ Misc:Button({
     end
 })
 
+-- Improved Anti-Void System
 local antiVoidEnabled = false
 local antiVoidPart = nil
 local antiVoidLoop = nil
-local antiVoidTouchConn = nil
+local lastSafePosition = nil
 
-local function SetupAntiVoid(enabled)
-    if enabled then
-        -- Create anti-void part
-        antiVoidPart = Instance.new("Part")
-        antiVoidPart.Size = Vector3.new(10000, 1, 10000)
-        antiVoidPart.Transparency = 0.5
-        antiVoidPart.Material = Enum.Material.ForceField
-        antiVoidPart.Anchored = true
-        antiVoidPart.CanCollide = true
-        antiVoidPart.Parent = workspace
-        
-        -- Position below player
-        local function updatePosition()
-            local character = LocalPlayer.Character
-            if character and character:FindFirstChild("HumanoidRootPart") then
-                local raycastParams = RaycastParams.new()
-                raycastParams.FilterDescendantsInstances = {character}
-                
-                local ray = workspace:Raycast(
-                    character.HumanoidRootPart.Position,
-                    Vector3.new(0, -1000, 0),
-                    raycastParams
-                )
-                
-                if ray then
-                    antiVoidPart.Position = ray.Position - Vector3.new(0, 15, 0)
-                end
-            end
-        end
-        
-        -- Update position periodically
-        antiVoidLoop = RunService.Heartbeat:Connect(function()
-            updatePosition()
-        end)
-        
-        -- Bounce player if they touch the anti-void
-        antiVoidTouchConn = antiVoidPart.Touched:Connect(function(part)
-            if part.Parent == LocalPlayer.Character and part:IsA("BasePart") then
-                part.Velocity = Vector3.new(part.Velocity.X, 100, part.Velocity.Z)
-            end
-        end)
-    else
-        -- Cleanup
-        if antiVoidPart then
-            antiVoidPart:Destroy()
-            antiVoidPart = nil
-        end
-        if antiVoidLoop then
-            antiVoidLoop:Disconnect()
-            antiVoidLoop = nil
-        end
-        if antiVoidTouchConn then
-            antiVoidTouchConn:Disconnect()
-            antiVoidTouchConn = nil
-        end
+local function createAntiVoid()
+    -- Create a smarter anti-void platform
+    antiVoidPart = Instance.new("Part")
+    antiVoidPart.Name = "AntiVoidPlatform"
+    antiVoidPart.Anchored = true
+    antiVoidPart.CanCollide = true
+    antiVoidPart.Size = Vector3.new(2000, 2, 2000) -- Wider coverage
+    antiVoidPart.Transparency = 0.7
+    antiVoidPart.Material = Enum.Material.Neon
+    antiVoidPart.Color = Color3.fromRGB(0, 255, 255)
+    antiVoidPart.Parent = workspace
+
+    -- Add safety forcefield
+    local forceField = Instance.new("ForceField")
+    forceField.Visible = false
+    forceField.Parent = antiVoidPart
+
+    -- Better bounce pad effect
+    local bouncePad = Instance.new("BodyVelocity")
+    bouncePad.MaxForce = Vector3.new(0, math.huge, 0)
+    bouncePad.Velocity = Vector3.new(0, 150, 0) -- Stronger bounce
+    bouncePad.Parent = antiVoidPart
+end
+
+local function updateAntiVoid()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+
+    local character = LocalPlayer.Character
+    local rootPart = character.HumanoidRootPart
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {character, antiVoidPart}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    -- Track safe position when not falling
+    if rootPart.Velocity.Y > -50 then -- Only update if not falling fast
+        lastSafePosition = rootPart.Position
+    end
+
+    -- Dynamic platform positioning
+    local rayOrigin = rootPart.Position
+    local rayDirection = Vector3.new(0, -1000, 0)
+    local raycastResult = workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+    if raycastResult then
+        -- Position platform 10 studs below the detected surface
+        antiVoidPart.Position = Vector3.new(
+            lastSafePosition.X, 
+            raycastResult.Position.Y - 15, 
+            lastSafePosition.Z
+        )
+    elseif lastSafePosition then
+        -- Fallback to last safe position if no raycast hit
+        antiVoidPart.Position = Vector3.new(
+            lastSafePosition.X, 
+            rootPart.Position.Y - 50, 
+            lastSafePosition.Z
+        )
+    end
+
+    -- Emergency teleport if falling too fast
+    if rootPart.Velocity.Y < -100 then
+        character:PivotTo(CFrame.new(lastSafePosition + Vector3.new(0, 5, 0)))
     end
 end
 
 Misc:Toggle({
-    Title = "Anti Void",
-    Desc = "Prevents falling into the void",
+    Title = "Anti-Void",
+    Desc = "Prevents falling through the map",
     Value = false,
     Callback = function(state)
         antiVoidEnabled = state
-        SetupAntiVoid(state)
+        if state then
+            createAntiVoid()
+            antiVoidLoop = RunService.Heartbeat:Connect(updateAntiVoid)
+            
+            -- Initialize last safe position
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                lastSafePosition = LocalPlayer.Character.HumanoidRootPart.Position
+            end
+        else
+            if antiVoidLoop then
+                antiVoidLoop:Disconnect()
+                antiVoidLoop = nil
+            end
+            if antiVoidPart then
+                antiVoidPart:Destroy()
+                antiVoidPart = nil
+            end
+            lastSafePosition = nil
+        end
     end
 })
+
+-- Auto-reinitialize on character respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if antiVoidEnabled then
+        task.wait(1) -- Wait for character to load
+        createAntiVoid()
+        if not antiVoidLoop then
+            antiVoidLoop = RunService.Heartbeat:Connect(updateAntiVoid)
+        end
+    end
+end)
 
 Misc:Section({Title = "Character Modifications"})
 Misc:Divider()
