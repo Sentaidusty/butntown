@@ -2955,3 +2955,14 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         setupHitboxes()
     end
 end)
+
+-- Theme & Save Setup (required for full UI functionality)
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+
+ThemeManager:LoadThemeFolder("ObsidianThemes")
+SaveManager:LoadSaveFolder("ObsidianSaves")
+SaveManager:BuildConfigSection(Tabs["UI Settings"])
+
+-- Final initialization call
+Library:OnLoad()
