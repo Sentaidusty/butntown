@@ -32,7 +32,7 @@ local rlglModule = {
 }
 
 local Window = WindUI:CreateWindow({
-    Title = "Agsy | Ink Game V2.5",
+    Title = "Agsy | Ink Game V2.6",
     Icon = "rbxassetid://122545428580310",
     IconThemed = true,
     Author = "Agsy",
@@ -48,7 +48,7 @@ Window:SetBackgroundImageTransparency(0.6)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Agsy | Ink Game V2.5",
+    Title = "Agsy | Ink Game V2.6,
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -78,7 +78,7 @@ local UpdateLogs = MainSection:Tab({
 })
 
 UpdateLogs:Paragraph({
-    Title = "Changelogs V2.5",
+    Title = "Changelogs V2.6",
     Desc = "[+] Added Guard ESP and Player ESP in Visuals Tab\n[+] Added Door ESP in Hide and Seek\n[+] Added Key ESP in Hide and Seek\n[~] Fixed Escape Door ESP in Hide and Seek Section\n[~] Fixed Reveal Safe Glasses\n[~] Fixed Auto Pull Rope in Tug Of War Section\n[+] Added Guard Hitbox Expander\n[+] Added Walkspeed and Jump Power Modifier",
     Image = "rbxassetid://122545428580310",
 })
@@ -131,45 +131,46 @@ local function showNotification(title, message)
     })
 end
 
--- Anti-Cheat Bypass Function
-local function PatchFlingAnticheat()
-    showNotification("Anti-Cheat", "Bypassing AntiCheat...")
+local function PlayerAimbot()
+    local RunService = game:GetService("RunService")
+    local Camera = workspace.CurrentCamera
+    local lplr = game:GetService("Players").LocalPlayer
     
-    local char = lplr.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+    local function getNearestPlayer()
+        local closest, dist = nil, math.huge
+        local lroot = lplr.Character and lplr.Character:FindFirstChild("HumanoidRootPart")
+        if not lroot then return end
 
-    -- Patch unwanted states/folders
-    local anticheatStates = { "Stun", "Anchor", "RotateDisabled", "CantRun", "InCutscene", "DisableHeadLookAt" }
-    char.ChildAdded:Connect(function(child)
-        if table.find(anticheatStates, child.Name) then
-            child:Destroy()
+        for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+            if player ~= lplr and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                local hum = player.Character:FindFirstChild("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local distance = (root.Position - lroot.Position).Magnitude
+                    if distance < dist then
+                        closest = root
+                        dist = distance
+                    end
+                end
+            end
         end
+        return closest
+    end
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        local target = getNearestPlayer()
+        if not target then return end
+        
+        local camPos = Camera.CFrame.Position
+        local lookVector = (target.Position - camPos).Unit
+        Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(camPos, camPos + lookVector), 0.2)
     end)
 
-    -- Patch metatable to prevent anchoring
-    local mt = getrawmetatable(root)
-    local oldNewIndex = mt.__newindex
-    setreadonly(mt, false)
-    mt.__newindex = function(self, key, value)
-        if self == root and key == "Anchored" and value == true then
-            -- Block anchoring
-            return
-        end
-        return oldNewIndex(self, key, value)
+    return function() -- Cleanup
+        connection:Disconnect()
     end
-    setreadonly(mt, true)
 end
-
--- Initial patch
-PatchFlingAnticheat()
-
--- Patch when character respawns
-game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    PatchFlingAnticheat()
-end)
 
 local function HandleRedLightGreenLight()
     local Players = game:GetService("Players")
@@ -224,44 +225,6 @@ local function HandleRedLightGreenLight()
     end
 end
 
--- Automatic Anti-Ban for Teleporting (exact implementation as requested)
-local originalNamecall
-local LastPosition
-
-local function enablePositionFreeze()
-    -- Store original metatable function
-    local rawmt = getrawmetatable(game)
-    setreadonly(rawmt, false)
-    originalNamecall = rawmt.__namecall
-    
-    -- Continuously update last position
-    game:GetService("RunService").Heartbeat:Connect(function()
-        local char = game.Players.LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            LastPosition = char.HumanoidRootPart.CFrame
-        end
-    end)
-
-    -- The hook that freezes position
-    rawmt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-
-        if method == "FireServer" 
-           and self.Name == "rootCFrame" 
-           and self.ClassName == "RemoteEvent" 
-           and LastPosition then
-            args[1] = LastPosition  -- Always send last recorded position
-            return originalNamecall(self, unpack(args))
-        end
-        
-        return originalNamecall(self, ...)
-    end)
-end
-
--- Activate the position freeze immediately
-enablePositionFreeze()
-
 -- Safer fling implementation
 local function fling()
     local lp = Players.LocalPlayer
@@ -309,72 +272,59 @@ Discord:Paragraph({
     }
 })
 
-local antiBanActive = false
-
-Discord:Button({
-    Title = "Anti Ban",
-    Callback = function()
-        if antiBanActive then return end
-        
-        -- Initialize anti-ban protection
-        local rawmt = getrawmetatable(game)
-        setreadonly(rawmt, false)
-        
-        -- Backup original methods
-        local originalNamecall = rawmt.__namecall
-        local originalIndex = rawmt.__index
-        local originalNewIndex = rawmt.__newindex
-        
-        -- Namecall hook
-        rawmt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            
-            -- Prevent certain remote calls from being detected
-            if method == "FireServer" or method == "InvokeServer" then
-                -- Whitelist safe remotes
-                local remoteName = tostring(self)
-                if remoteName:find("Dialogue") or remoteName:find("Effect") then
-                    return originalNamecall(self, ...)
-                end
-                
-                -- Delay and randomize calls to avoid detection
-                task.wait(math.random() * 0.1)
-            end
-            
-            return originalNamecall(self, ...)
-        end)
-        
-        -- Index hook
-        rawmt.__index = newcclosure(function(t, k)
-            -- Prevent detection of certain property checks
-            if tostring(k) == "WalkSpeed" or tostring(k) == "JumpPower" then
-                return originalIndex(t, k)
-            end
-            return originalIndex(t, k)
-        end)
-        
-        -- Newindex hook
-        rawmt.__newindex = newcclosure(function(t, k, v)
-            -- Prevent modification of certain properties from being detected
-            if tostring(k) == "WalkSpeed" or tostring(k) == "JumpPower" then
-                -- Allow modification but with slight randomization
-                if math.random() > 0.5 then
-                    task.wait(math.random() * 0.05)
-                end
-                return originalNewIndex(t, k, v)
-            end
-            return originalNewIndex(t, k, v)
-        end)
-        
-        setreadonly(rawmt, true)
-        antiBanActive = true
-        
-    end
-})
-
 -- Game Tab
 Main:Section({Title = "OP"})
 Main:Divider()
+
+Main:Button({
+    Title = "Bypass AntiCheat",
+    Desc = "Patches anti cheat",
+    Callback = function()
+        local function PatchAnticheat()
+            local originalIndex, originalNewIndex
+            
+            -- Prevent velocity checks
+            originalIndex = hookmetamethod(game, "__index", function(self, key)
+                if key == "Velocity" or key == "AssemblyLinearVelocity" then
+                    if tostring(self) == "HumanoidRootPart" and getcallingscript() and getcallingscript().Name:find("AntiCheat") then
+                        return Vector3.zero
+                    end
+                end
+                return originalIndex(self, key)
+            end)
+
+            -- Prevent position checks
+            originalNewIndex = hookmetamethod(game, "__newindex", function(self, key, value)
+                if key == "CFrame" and tostring(self) == "HumanoidRootPart" and getcallingscript() and getcallingscript().Name:find("AntiCheat") then
+                    return nil
+                end
+                return originalNewIndex(self, key, value)
+            end
+
+            -- Clean ragdolls
+            local function cleanRagdoll(char)
+                for _, v in pairs(char:GetDescendants()) do
+                    if v.Name == "Ragdoll" or v.Name == "Stun" then
+                        v:Destroy()
+                    end
+                end
+            end
+
+            game:GetService("Players").LocalPlayer.CharacterAdded:Connect(cleanRagdoll)
+            if game:GetService("Players").LocalPlayer.Character then
+                cleanRagdoll(game:GetService("Players").LocalPlayer.Character)
+            end
+
+            return function() -- Cleanup
+                hookmetamethod(game, "__index", originalIndex)
+                hookmetamethod(game, "__newindex", originalNewIndex)
+            end
+        end
+
+        PatchAnticheat()
+        showNotification("Anti-Cheat", "AntiCheat bypass applied successfully")
+    end
+})
 
 Main:Toggle({
     Title = "Touch Fling",
@@ -440,44 +390,78 @@ Main:Button({
     end
 })
 
--- RLGL Godmode
-local rlglGodmodeEnabled = false
-local originalRLGLHook
-local lastSafePosition
-local isGreenLight = true
-
-local function SetRLGLGodmode(enabled)
-    if enabled then
-        -- Track light changes
-        game:GetService("ReplicatedStorage").Remotes.Effects.OnClientEvent:Connect(function(data)
-            if data.EffectName == "TrafficLight" then
-                isGreenLight = data.GreenLight
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    lastSafePosition = LocalPlayer.Character.HumanoidRootPart.CFrame
-                end
-            end
-        end)
-
-        originalRLGLHook = hookmetamethod(game, "__namecall", function(self, ...)
-            local args = {...}
-            if tostring(self) == "rootCFrame" and not isGreenLight and lastSafePosition then
-                args[1] = lastSafePosition -- Freeze position during red light
-            end
-            return originalRLGLHook(self, unpack(args))
-        end)
-    elseif originalRLGLHook then
-        hookmetamethod(game, "__namecall", originalRLGLHook)
-        originalRLGLHook = nil
-    end
-end
+local RLGL_OriginalNamecall
+local RLGL_Connection
 
 Main:Toggle({
     Title = "Godmode",
     Desc = "Prevents detection during red light",
     Value = false,
     Callback = function(state)
-        rlglGodmodeEnabled = state
-        SetRLGLGodmode(state)
+        if state then
+            if not hookmetamethod then
+                showNotification("Error", "Your executor doesn't support this feature")
+                return
+            end
+
+            local lastRootPartCFrame = nil
+            local isGreenLight = true
+
+            -- Detect initial light state
+            local TrafficLightImage = LocalPlayer.PlayerGui:FindFirstChild("ImpactFrames") and
+                LocalPlayer.PlayerGui.ImpactFrames:FindFirstChild("TrafficLightEmpty")
+            if TrafficLightImage and ReplicatedStorage:FindFirstChild("Effects") then
+                local lights = ReplicatedStorage.Effects:FindFirstChild("Images")
+                if lights and lights:FindFirstChild("TrafficLights") and lights.TrafficLights:FindFirstChild("GreenLight") then
+                    isGreenLight = TrafficLightImage.Image == lights.TrafficLights.GreenLight.Image
+                end
+            end
+
+            local function updateCFrame()
+                local character = LocalPlayer.Character
+                local root = character and character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    lastRootPartCFrame = root.CFrame
+                end
+            end
+            updateCFrame()
+
+            -- Listen for light changes
+            RLGL_Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(data)
+                if data.EffectName == "TrafficLight" then
+                    isGreenLight = data.GreenLight == true
+                    updateCFrame()
+                end
+            end)
+
+            -- Hook the remote call
+            RLGL_OriginalNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                local args = {...}
+                local method = getnamecallmethod()
+                if tostring(self) == "rootCFrame" and method == "FireServer" then
+                    if state and not isGreenLight and lastRootPartCFrame then
+                        args[1] = lastRootPartCFrame
+                        return RLGL_OriginalNamecall(self, unpack(args))
+                    end
+                end
+                return RLGL_OriginalNamecall(self, ...)
+            end
+
+            showNotification("RLGL Godmode", "Red Light Green Light Godmode Enabled")
+        else
+            -- Cleanup
+            if RLGL_Connection then
+                RLGL_Connection:Disconnect()
+                RLGL_Connection = nil
+            end
+            
+            if RLGL_OriginalNamecall then
+                hookmetamethod(game, "__namecall", RLGL_OriginalNamecall)
+                RLGL_OriginalNamecall = nil
+            end
+            
+            showNotification("RLGL Godmode", "Red Light Green Light Godmode Disabled")
+        end
     end
 })
 
@@ -505,23 +489,27 @@ local function TransportInjuredPlayer()
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
-    -- Carry player
+    -- Step 1: Teleport to injured player
     char:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
+    task.wait(0.5)
+    
+    -- Step 2: Fire the carry prompt
     fireproximityprompt(prompt)
-    task.wait(0.2)
-
-    -- Move to finish (-100.8, 1030, 115)
+    task.wait(1)
+    
+    -- Step 3: Teleport to finish location
     char:PivotTo(CFrame.new(-100.8, 1030, 115))
-    task.wait(0.2)
-
-    -- Release player
+    task.wait(1)
+    
+    -- Step 4: Release player
     game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
+    task.wait(0.5)
 end
 
 local function AutoSaveInjured()
     while saveInjuredEnabled do
         TransportInjuredPlayer()
-        task.wait(1) -- Check every second to prevent spamming
+        task.wait(2)
     end
 end
 
@@ -696,7 +684,7 @@ local function SetDalgonaImmune(enabled)
 end
 
 Main:Toggle({
-    Title = "Crack Immunity",
+    Title = "Crack Immunity (Not sure if work)",
     Desc = "Prevents your dalgona from cracking",
     Value = false,
     Callback = function(state)
@@ -878,177 +866,6 @@ Main:Toggle({
     end
 })
 
--- ESP Variables
-local hiderESPEnabled = false
-local hunterESPEnabled = false
-local hiderHighlights = {}
-local hunterHighlights = {}
-
--- ESP Functions (exactly as you provided)
-local function HiderESP(player)
-    if player:GetAttribute("IsHider") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hiderHighlights[player] then
-            hiderHighlights[player]:Destroy()
-            hiderHighlights[player] = nil
-        end
-
-        if not hiderESPEnabled then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green for hiders
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hiderHighlights[player] = highlight
-
-        -- Cleanup when player is no longer a hider
-        player:GetAttributeChangedSignal("IsHider"):Connect(function()
-            if hiderHighlights[player] then 
-                hiderHighlights[player]:Destroy()
-                hiderHighlights[player] = nil
-            end
-        end)
-    end
-end
-
-local function HunterESP(player)
-    if player:GetAttribute("IsHunter") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hunterHighlights[player] then
-            hunterHighlights[player]:Destroy()
-            hunterHighlights[player] = nil
-        end
-
-        if not hunterESPEnabled then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for hunters
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hunterHighlights[player] = highlight
-
-        -- Cleanup when player is no longer a hunter
-        player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-            if hunterHighlights[player] then 
-                hunterHighlights[player]:Destroy()
-                hunterHighlights[player] = nil
-            end
-        end)
-    end
-end
-
--- Apply ESP to all players
-local function ApplyHideAndSeekESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-end
-
--- Cleanup all ESP
-local function CleanupHideAndSeekESP()
-    for player, highlight in pairs(hiderHighlights) do
-        if highlight then highlight:Destroy() end
-    end
-    for player, highlight in pairs(hunterHighlights) do
-        if highlight then highlight:Destroy() end
-    end
-    table.clear(hiderHighlights)
-    table.clear(hunterHighlights)
-end
-
--- Player Added/Removed Handlers
-local function OnPlayerAdded(player)
-    if player ~= LocalPlayer then
-        HiderESP(player)
-        HunterESP(player)
-    end
-end
-
-local function OnPlayerRemoving(player)
-    if hiderHighlights[player] then
-        hiderHighlights[player]:Destroy()
-        hiderHighlights[player] = nil
-    end
-    if hunterHighlights[player] then
-        hunterHighlights[player]:Destroy()
-        hunterHighlights[player] = nil
-    end
-end
-
--- Initialize ESP connections
-local function InitializeESP()
-    -- Cleanup existing ESP
-    CleanupHideAndSeekESP()
-    
-    -- Apply to existing players
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-    
-    -- Connect signals
-    Players.PlayerAdded:Connect(OnPlayerAdded)
-    Players.PlayerRemoving:Connect(OnPlayerRemoving)
-    
-    -- Track attribute changes
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            player:GetAttributeChangedSignal("IsHider"):Connect(function()
-                HiderESP(player)
-            end)
-            player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-                HunterESP(player)
-            end)
-        end
-    end
-end
-
--- Toggles
-Main:Toggle({
-    Title = "ESP Hiders",
-    Desc = "Highlights hiders in green",
-    Value = false,
-    Callback = function(state)
-        hiderESPEnabled = state
-        if state then
-            InitializeESP()
-        else
-            -- Only clean up hider highlights
-            for player, highlight in pairs(hiderHighlights) do
-                if highlight then highlight:Destroy() end
-            end
-            table.clear(hiderHighlights)
-        end
-    end
-})
-
-Main:Toggle({
-    Title = "ESP Hunters",
-    Desc = "Highlights hunters in red",
-    Value = false,
-    Callback = function(state)
-        hunterESPEnabled = state
-        if state then
-            InitializeESP()
-        else
-            -- Only clean up hunter highlights
-            for player, highlight in pairs(hunterHighlights) do
-                if highlight then highlight:Destroy() end
-            end
-            table.clear(hunterHighlights)
-        end
-    end
-})
-
 local killHidersEnabled = false
 local killHidersConnection
 
@@ -1092,322 +909,6 @@ Main:Toggle({
         if state then
             coroutine.wrap(KillHiders)()
         end
-    end
-})
-
--- Add Key ESP toggle
-local keyESPEnabled = false
-local keyESPConnections = {}
-local keyHighlights = {}
-
-local function KeyESP(keyModel)
-    if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
-        return
-    end
-
-    -- Create Highlight for the key
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "KeyESP"
-    highlight.Adornee = keyModel
-    highlight.FillColor = Color3.fromRGB(255, 255, 0)  -- Yellow color for keys
-    highlight.OutlineColor = Color3.fromRGB(255, 215, 0) -- Gold outline
-    highlight.FillTransparency = 0.3
-    highlight.OutlineTransparency = 0
-    highlight.Parent = keyModel
-    keyHighlights[keyModel] = highlight
-
-    -- Clean up if the key is destroyed or removed
-    local connection
-    connection = keyModel.AncestryChanged:Connect(function(_, parent)
-        if not parent or not keyModel:IsDescendantOf(game) then
-            if highlight and highlight.Parent then
-                highlight:Destroy()
-            end
-            if connection then
-                connection:Disconnect()
-            end
-            keyHighlights[keyModel] = nil
-        end
-    end)
-
-    keyESPConnections[keyModel] = connection
-end
-
-local function SetupKeyESP()
-    -- Clear existing highlights and connections
-    for key, highlight in pairs(keyHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(keyHighlights)
-    
-    for key, conn in pairs(keyESPConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(keyESPConnections)
-
-    if not keyESPEnabled then return end
-
-    -- Scan existing keys in workspace
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name:lower():find("key") and obj:IsA("Model") then
-            KeyESP(obj)
-        end
-    end
-
-    -- Listen for new keys
-    keyESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj.Name:lower():find("key") and obj:IsA("Model") then
-            KeyESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Key",
-    Desc = "Highlights keys in Hide and Seek",
-    Value = false,
-    Callback = function(state)
-        keyESPEnabled = state
-        SetupKeyESP()
-    end
-})
-
--- Improved Escape Door ESP
-local escapeDoorESPEnabled = false
-local escapeDoorHighlights = {}
-local escapeDoorBillboards = {}
-local escapeDoorConnections = {}
-
-local function EscapeDoorESP(door)
-    -- Validate the door object
-    if not door or not door:IsA("Model") then return end
-    if not door.PrimaryPart then return end
-    
-    -- Check if this door already has ESP
-    if escapeDoorHighlights[door] or escapeDoorBillboards[door] then return end
-
-    -- Create visual elements
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = door
-    highlight.FillColor = Color3.fromRGB(0, 255, 0)  -- Green for escape
-    highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
-    highlight.FillTransparency = 0.4
-    highlight.OutlineTransparency = 0
-    highlight.Parent = door
-    escapeDoorHighlights[door] = highlight
-
-    -- Add a floating text label
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = door.PrimaryPart
-    billboard.Size = UDim2.new(0, 100, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Text = "ESCAPE DOOR"
-    label.TextColor3 = Color3.fromRGB(0, 255, 0)
-    label.TextSize = 14
-    label.Font = Enum.Font.Oswald
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Parent = billboard
-    billboard.Parent = door
-    escapeDoorBillboards[door] = billboard
-
-    -- Cleanup function
-    local function cleanup()
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-        escapeDoorHighlights[door] = nil
-        escapeDoorBillboards[door] = nil
-    end
-
-    -- Auto-cleanup when door is removed
-    escapeDoorConnections[door] = door.AncestryChanged:Connect(function(_, parent)
-        if not parent then cleanup() end
-    end)
-end
-
-local function SetupEscapeDoorESP()
-    -- Clear existing ESP
-    for door, highlight in pairs(escapeDoorHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(escapeDoorHighlights)
-    
-    for door, billboard in pairs(escapeDoorBillboards) do
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-    end
-    table.clear(escapeDoorBillboards)
-    
-    for door, conn in pairs(escapeDoorConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(escapeDoorConnections)
-
-    if not escapeDoorESPEnabled then return end
-
-    -- Check existing doors
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name == "EXITDOOR" then
-            EscapeDoorESP(obj)
-        end
-    end
-
-    -- Monitor for new doors
-    escapeDoorConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj.Name == "EXITDOOR" then
-            EscapeDoorESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Escape Doors",
-    Desc = "Highlights escape doors in Hide and Seek",
-    Value = false,
-    Callback = function(state)
-        escapeDoorESPEnabled = state
-        SetupEscapeDoorESP()
-    end
-})
-
--- Add Door ESP toggle
-local doorESPEnabled = false
-local doorESPConnections = {}
-local doorHighlights = {}
-local doorBillboards = {}
-
-local function DoorESP(door)
-    if not door:IsA("Model") or not door.PrimaryPart then return end
-    
-    -- Only target door models (adjust names as needed)
-    if not (door.Name:find("Door") or door.Name:find("door")) then return end
-
-    -- Clear existing ESP if any
-    if doorHighlights[door] then
-        doorHighlights[door]:Destroy()
-        doorHighlights[door] = nil
-    end
-    if doorBillboards[door] then
-        doorBillboards[door]:Destroy()
-        doorBillboards[door] = nil
-    end
-
-    if not doorESPEnabled then return end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "DoorESP"
-    highlight.Adornee = door
-    highlight.FillColor = Color3.fromRGB(255, 165, 0)  -- Orange
-    highlight.OutlineColor = Color3.fromRGB(255, 100, 0)
-    highlight.FillTransparency = 0.6
-    highlight.Parent = door
-    doorHighlights[door] = highlight
-
-    -- Show required key if available
-    local keyNeeded = door:GetAttribute("KeyNeeded") or "Unknown"
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = door.PrimaryPart
-    billboard.Size = UDim2.new(0, 150, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Text = "DOOR (Key: "..keyNeeded..")"
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 14
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.Parent = billboard
-    billboard.Parent = door
-    doorBillboards[door] = billboard
-
-    -- Cleanup function
-    local function cleanup()
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-        doorHighlights[door] = nil
-        doorBillboards[door] = nil
-    end
-
-    -- Auto-cleanup when door is removed
-    doorESPConnections[door] = door.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            cleanup()
-            if doorESPConnections[door] then
-                doorESPConnections[door]:Disconnect()
-                doorESPConnections[door] = nil
-            end
-        end
-    end)
-end
-
-local function SetupDoorESP()
-    -- Clear existing ESP
-    for door, highlight in pairs(doorHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(doorHighlights)
-    
-    for door, billboard in pairs(doorBillboards) do
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-    end
-    table.clear(doorBillboards)
-    
-    for door, conn in pairs(doorESPConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(doorESPConnections)
-
-    if not doorESPEnabled then return end
-
-    -- Find existing doors
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            DoorESP(obj)
-        end
-    end
-
-    -- Detect new doors
-    doorESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("Model") then
-            DoorESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Door and Required Key",
-    Desc = "Highlights doors and shows required key",
-    Value = false,
-    Callback = function(state)
-        doorESPEnabled = state
-        SetupDoorESP()
     end
 })
 
@@ -1684,6 +1185,26 @@ Combat:Toggle({
         elseif guardAimbotCleanup then
             guardAimbotCleanup()
             guardAimbotCleanup = nil
+        end
+    end
+})
+
+Combat:Toggle({
+    Title = "Player Aimbot",
+    Desc = "Automatically aims at the nearest player",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local cleanup = PlayerAimbot()
+            -- Store cleanup function to disable later
+            getgenv().PlayerAimbotCleanup = cleanup
+            showNotification("Aimbot", "Player Aimbot enabled")
+        else
+            if getgenv().PlayerAimbotCleanup then
+                getgenv().PlayerAimbotCleanup()
+                getgenv().PlayerAimbotCleanup = nil
+                showNotification("Aimbot", "Player Aimbot disabled")
+            end
         end
     end
 })
@@ -2046,6 +1567,152 @@ Utility:Button({
 
 Utility:Section({Title = "Utilities"})
 Utility:Divider()
+
+-- Invisibility Toggle
+local invisibilityEnabled = false
+local invisibilityCleanup
+
+Utility:Toggle({
+    Title = "Invisibility",
+    Desc = "Makes your character transparent and float",
+    Value = false,
+    Callback = function(state)
+        invisibilityEnabled = state
+        if state then
+            local char = LocalPlayer.Character
+            if not char then return end
+
+            -- Store original properties
+            local original = {
+                transparency = {},
+                material = {},
+                decals = {}
+            }
+
+            -- Make character transparent
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    original.transparency[part] = part.Transparency
+                    original.material[part] = part.Material
+                    part.Transparency = 0.7
+                    part.Material = Enum.Material.Glass
+                elseif part:IsA("Decal") then
+                    original.decals[part] = part.Transparency
+                    part.Transparency = 1
+                end
+            end
+
+            -- Floating animation
+            local floatHeight = 2
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.PlatformStand = true
+            end
+
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                local bodyVelocity = Instance.new("BodyVelocity")
+                bodyVelocity.Velocity = Vector3.new(0, floatHeight, 0)
+                bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
+                bodyVelocity.Parent = root
+
+                -- Store cleanup function
+                invisibilityCleanup = function()
+                    for part, transparency in pairs(original.transparency) do
+                        part.Transparency = transparency
+                    end
+                    for part, material in pairs(original.material) do
+                        part.Material = material
+                    end
+                    for decal, transparency in pairs(original.decals) do
+                        decal.Transparency = transparency
+                    end
+                    if humanoid then
+                        humanoid.PlatformStand = false
+                    end
+                    if bodyVelocity then
+                        bodyVelocity:Destroy()
+                    end
+                end
+            end
+        elseif invisibilityCleanup then
+            invisibilityCleanup()
+            invisibilityCleanup = nil
+        end
+    end
+})
+
+-- Lightning God Toggle
+local lightningGodEnabled = false
+local lightningGodCleanup
+
+Utility:Toggle({
+    Title = "Lightning God Awakening (Visual)",
+    Desc = "Gives you lightning particle effects and damage boost",
+    Value = false,
+    Callback = function(state)
+        lightningGodEnabled = state
+        if state then
+            local char = LocalPlayer.Character
+            if not char then return end
+
+            -- Create effect folder
+            local effectsFolder = Instance.new("Folder")
+            effectsFolder.Name = "LightningGodEffects"
+            effectsFolder.Parent = char
+
+            -- Create lightning particles
+            local attachment = Instance.new("Attachment")
+            attachment.Parent = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head") or char.PrimaryPart
+
+            local lightning = Instance.new("ParticleEmitter")
+            lightning.LightEmission = 1
+            lightning.Texture = "rbxassetid://243098098"
+            lightning.LightInfluence = 0
+            lightning.Color = ColorSequence.new(Color3.fromRGB(0, 162, 255))
+            lightning.Size = NumberSequence.new(1)
+            lightning.Lifetime = NumberRange.new(0.5)
+            lightning.Rate = 50
+            lightning.Rotation = NumberRange.new(0, 360)
+            lightning.Speed = NumberRange.new(5)
+            lightning.SpreadAngle = Vector2.new(360, 360)
+            lightning.Shape = Enum.ParticleEmitterShape.Sphere
+            lightning.Parent = attachment
+
+            -- Damage boost function
+            local function onHit(hit, humanoid)
+                if humanoid and humanoid.Parent ~= char then
+                    humanoid:TakeDamage(25) -- Increased damage
+                end
+            end
+
+            -- Connect to character's touched events
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Touched:Connect(function(hit)
+                        local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            onHit(hit, humanoid)
+                        end
+                    end)
+                end
+            end
+
+            -- Store cleanup function
+            lightningGodCleanup = function()
+                if effectsFolder then
+                    effectsFolder:Destroy()
+                end
+                if attachment then
+                    attachment:Destroy()
+                end
+            end
+        elseif lightningGodCleanup then
+            lightningGodCleanup()
+            lightningGodCleanup = nil
+        end
+    end
+})
 
 Utility:Input({
     Title = "Change Number Tag",
@@ -2826,6 +2493,496 @@ Visual:Toggle({
     Callback = function(state)
         guardESPEnabled = state
         SetupGuardESP()
+    end
+})
+
+Visual:Section({Title = "Hide and Seek"})
+Visual:Divider()
+
+-- ESP Variables
+local hiderESPEnabled = false
+local hunterESPEnabled = false
+local hiderHighlights = {}
+local hunterHighlights = {}
+
+-- ESP Functions (exactly as you provided)
+local function HiderESP(player)
+    if player:GetAttribute("IsHider") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        -- Clear existing highlight if any
+        if hiderHighlights[player] then
+            hiderHighlights[player]:Destroy()
+            hiderHighlights[player] = nil
+        end
+
+        if not hiderESPEnabled then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = player.Character
+        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green for hiders
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = player.Character
+        hiderHighlights[player] = highlight
+
+        -- Cleanup when player is no longer a hider
+        player:GetAttributeChangedSignal("IsHider"):Connect(function()
+            if hiderHighlights[player] then 
+                hiderHighlights[player]:Destroy()
+                hiderHighlights[player] = nil
+            end
+        end)
+    end
+end
+
+local function HunterESP(player)
+    if player:GetAttribute("IsHunter") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        -- Clear existing highlight if any
+        if hunterHighlights[player] then
+            hunterHighlights[player]:Destroy()
+            hunterHighlights[player] = nil
+        end
+
+        if not hunterESPEnabled then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = player.Character
+        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for hunters
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = player.Character
+        hunterHighlights[player] = highlight
+
+        -- Cleanup when player is no longer a hunter
+        player:GetAttributeChangedSignal("IsHunter"):Connect(function()
+            if hunterHighlights[player] then 
+                hunterHighlights[player]:Destroy()
+                hunterHighlights[player] = nil
+            end
+        end)
+    end
+end
+
+-- Apply ESP to all players
+local function ApplyHideAndSeekESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            HiderESP(player)
+            HunterESP(player)
+        end
+    end
+end
+
+-- Cleanup all ESP
+local function CleanupHideAndSeekESP()
+    for player, highlight in pairs(hiderHighlights) do
+        if highlight then highlight:Destroy() end
+    end
+    for player, highlight in pairs(hunterHighlights) do
+        if highlight then highlight:Destroy() end
+    end
+    table.clear(hiderHighlights)
+    table.clear(hunterHighlights)
+end
+
+-- Player Added/Removed Handlers
+local function OnPlayerAdded(player)
+    if player ~= LocalPlayer then
+        HiderESP(player)
+        HunterESP(player)
+    end
+end
+
+local function OnPlayerRemoving(player)
+    if hiderHighlights[player] then
+        hiderHighlights[player]:Destroy()
+        hiderHighlights[player] = nil
+    end
+    if hunterHighlights[player] then
+        hunterHighlights[player]:Destroy()
+        hunterHighlights[player] = nil
+    end
+end
+
+-- Initialize ESP connections
+local function InitializeESP()
+    -- Cleanup existing ESP
+    CleanupHideAndSeekESP()
+    
+    -- Apply to existing players
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            HiderESP(player)
+            HunterESP(player)
+        end
+    end
+    
+    -- Connect signals
+    Players.PlayerAdded:Connect(OnPlayerAdded)
+    Players.PlayerRemoving:Connect(OnPlayerRemoving)
+    
+    -- Track attribute changes
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            player:GetAttributeChangedSignal("IsHider"):Connect(function()
+                HiderESP(player)
+            end)
+            player:GetAttributeChangedSignal("IsHunter"):Connect(function()
+                HunterESP(player)
+            end)
+        end
+    end
+end
+
+-- Toggles
+Visual:Toggle({
+    Title = "ESP Hiders",
+    Desc = "Highlights hiders in green",
+    Value = false,
+    Callback = function(state)
+        hiderESPEnabled = state
+        if state then
+            InitializeESP()
+        else
+            -- Only clean up hider highlights
+            for player, highlight in pairs(hiderHighlights) do
+                if highlight then highlight:Destroy() end
+            end
+            table.clear(hiderHighlights)
+        end
+    end
+})
+
+Visual:Toggle({
+    Title = "ESP Hunters",
+    Desc = "Highlights hunters in red",
+    Value = false,
+    Callback = function(state)
+        hunterESPEnabled = state
+        if state then
+            InitializeESP()
+        else
+            -- Only clean up hunter highlights
+            for player, highlight in pairs(hunterHighlights) do
+                if highlight then highlight:Destroy() end
+            end
+            table.clear(hunterHighlights)
+        end
+    end
+})
+
+-- Add Key ESP toggle
+local keyESPEnabled = false
+local keyESPConnections = {}
+local keyHighlights = {}
+
+local function KeyESP(keyModel)
+    if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
+        return
+    end
+
+    -- Create Highlight for the key
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "KeyESP"
+    highlight.Adornee = keyModel
+    highlight.FillColor = Color3.fromRGB(255, 255, 0)  -- Yellow color for keys
+    highlight.OutlineColor = Color3.fromRGB(255, 215, 0) -- Gold outline
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.Parent = keyModel
+    keyHighlights[keyModel] = highlight
+
+    -- Clean up if the key is destroyed or removed
+    local connection
+    connection = keyModel.AncestryChanged:Connect(function(_, parent)
+        if not parent or not keyModel:IsDescendantOf(game) then
+            if highlight and highlight.Parent then
+                highlight:Destroy()
+            end
+            if connection then
+                connection:Disconnect()
+            end
+            keyHighlights[keyModel] = nil
+        end
+    end)
+
+    keyESPConnections[keyModel] = connection
+end
+
+local function SetupKeyESP()
+    -- Clear existing highlights and connections
+    for key, highlight in pairs(keyHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(keyHighlights)
+    
+    for key, conn in pairs(keyESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(keyESPConnections)
+
+    if not keyESPEnabled then return end
+
+    -- Scan existing keys in workspace
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
+        end
+    end
+
+    -- Listen for new keys
+    keyESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
+        end
+    end)
+end
+
+Visual:Toggle({
+    Title = "ESP Key",
+    Desc = "Highlights keys in Hide and Seek",
+    Value = false,
+    Callback = function(state)
+        keyESPEnabled = state
+        SetupKeyESP()
+    end
+})
+
+-- Improved Escape Door ESP
+local escapeDoorESPEnabled = false
+local escapeDoorHighlights = {}
+local escapeDoorBillboards = {}
+local escapeDoorConnections = {}
+
+local function EscapeDoorESP(door)
+    -- Validate the door object
+    if not door or not door:IsA("Model") then return end
+    if not door.PrimaryPart then return end
+    
+    -- Check if this door already has ESP
+    if escapeDoorHighlights[door] or escapeDoorBillboards[door] then return end
+
+    -- Create visual elements
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(0, 255, 0)  -- Green for escape
+    highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Parent = door
+    escapeDoorHighlights[door] = highlight
+
+    -- Add a floating text label
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "ESCAPE DOOR"
+    label.TextColor3 = Color3.fromRGB(0, 255, 0)
+    label.TextSize = 14
+    label.Font = Enum.Font.Oswald
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Parent = billboard
+    billboard.Parent = door
+    escapeDoorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        escapeDoorHighlights[door] = nil
+        escapeDoorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    escapeDoorConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then cleanup() end
+    end)
+end
+
+local function SetupEscapeDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(escapeDoorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(escapeDoorHighlights)
+    
+    for door, billboard in pairs(escapeDoorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(escapeDoorBillboards)
+    
+    for door, conn in pairs(escapeDoorConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(escapeDoorConnections)
+
+    if not escapeDoorESPEnabled then return end
+
+    -- Check existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end
+
+    -- Monitor for new doors
+    escapeDoorConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end)
+end
+
+Visual:Toggle({
+    Title = "ESP Escape Doors",
+    Desc = "Highlights escape doors in Hide and Seek",
+    Value = false,
+    Callback = function(state)
+        escapeDoorESPEnabled = state
+        SetupEscapeDoorESP()
+    end
+})
+
+-- Add Door ESP toggle
+local doorESPEnabled = false
+local doorESPConnections = {}
+local doorHighlights = {}
+local doorBillboards = {}
+
+local function DoorESP(door)
+    if not door:IsA("Model") or not door.PrimaryPart then return end
+    
+    -- Only target door models (adjust names as needed)
+    if not (door.Name:find("Door") or door.Name:find("door")) then return end
+
+    -- Clear existing ESP if any
+    if doorHighlights[door] then
+        doorHighlights[door]:Destroy()
+        doorHighlights[door] = nil
+    end
+    if doorBillboards[door] then
+        doorBillboards[door]:Destroy()
+        doorBillboards[door] = nil
+    end
+
+    if not doorESPEnabled then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "DoorESP"
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(255, 165, 0)  -- Orange
+    highlight.OutlineColor = Color3.fromRGB(255, 100, 0)
+    highlight.FillTransparency = 0.6
+    highlight.Parent = door
+    doorHighlights[door] = highlight
+
+    -- Show required key if available
+    local keyNeeded = door:GetAttribute("KeyNeeded") or "Unknown"
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 150, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "DOOR (Key: "..keyNeeded..")"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Parent = billboard
+    billboard.Parent = door
+    doorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        doorHighlights[door] = nil
+        doorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    doorESPConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            cleanup()
+            if doorESPConnections[door] then
+                doorESPConnections[door]:Disconnect()
+                doorESPConnections[door] = nil
+            end
+        end
+    end)
+end
+
+local function SetupDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(doorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(doorHighlights)
+    
+    for door, billboard in pairs(doorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(doorBillboards)
+    
+    for door, conn in pairs(doorESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(doorESPConnections)
+
+    if not doorESPEnabled then return end
+
+    -- Find existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end
+
+    -- Detect new doors
+    doorESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end)
+end
+
+Visual:Toggle({
+    Title = "ESP Door and Required Key",
+    Desc = "Highlights doors and shows required key",
+    Value = false,
+    Callback = function(state)
+        doorESPEnabled = state
+        SetupDoorESP()
     end
 })
 
