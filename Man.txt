@@ -28,7 +28,7 @@ local rlglModule = {
     _LastRootPartCFrame = nil,
     _OriginalNamecall = nil,
     _Connection = nil,
-    _CleanupFunction = nil  -- Add this line
+    _CleanupFunction = nil
 }
 
 Library.ForceCheckbox = false
@@ -54,7 +54,7 @@ local Tabs = {
     ["UI Settings"] = Window:AddTab("UI Settings", "settings")
 }
 
--- Important Tab
+-- ========== MAIN TAB ==========
 local ImportantGroup = Tabs.Main:AddLeftGroupbox("Important")
 ImportantGroup:AddLabel("Join Discord To Know Updates!"):AddButton({
     Text = "Copy Invite",
@@ -78,7 +78,7 @@ ImportantGroup:AddLabel("Changelogs V2.6"):AddLabel([[
 [+] Added Guard Hitbox Expander
 [+] Added Walkspeed and Jump Power Modifier]], true)
 
--- Game Tab - Win Section
+-- ========== GAME TAB ==========
 local WinGroup = Tabs.Game:AddLeftGroupbox("Win")
 WinGroup:AddLabel("OP"):AddDivider()
 
@@ -188,8 +188,9 @@ WinGroup:AddToggle("AntiFling", {
 })
 
 -- Red Light Green Light Section
-WinGroup:AddLabel("Red Light Green Light"):AddDivider()
-WinGroup:AddButton({
+local RLGLGroup = Tabs.Game:AddRightGroupbox("Red Light Green Light")
+RLGLGroup:AddLabel("Red Light Green Light"):AddDivider()
+RLGLGroup:AddButton({
     Text = "Complete Red Light Green Light",
     Func = function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -202,7 +203,7 @@ WinGroup:AddButton({
 local RLGL_OriginalNamecall
 local RLGL_Connection
 
-WinGroup:AddToggle("RLGLGodmode", {
+RLGLGroup:AddToggle("RLGLGodmode", {
     Text = "Godmode",
     Tooltip = "Prevents detection during red light",
     Default = false,
@@ -287,12 +288,13 @@ WinGroup:AddToggle("RLGLGodmode", {
 })
 
 -- Glass Bridge Section
-WinGroup:AddLabel("Glass Bridge"):AddDivider()
+local GlassBridgeGroup = Tabs.Game:AddLeftGroupbox("Glass Bridge")
+GlassBridgeGroup:AddLabel("Glass Bridge"):AddDivider()
 
 local glassESPEnabled = false
 local glassHighlights = {}
 
-WinGroup:AddToggle("RevealGlass", {
+GlassBridgeGroup:AddToggle("RevealGlass", {
     Text = "Reveal Safe Glass",
     Tooltip = "Shows safe (green) and breakable (red) tiles",
     Default = false,
@@ -316,7 +318,7 @@ WinGroup:AddToggle("RevealGlass", {
     end
 })
 
-WinGroup:AddButton({
+GlassBridgeGroup:AddButton({
     Text = "Teleport to End of Bridge",
     Tooltip = "Instantly completes the glass bridge",
     Func = function()
@@ -328,12 +330,13 @@ WinGroup:AddButton({
 })
 
 -- Mingle Section
-WinGroup:AddLabel("Mingle"):AddDivider()
+local MingleGroup = Tabs.Game:AddRightGroupbox("Mingle")
+MingleGroup:AddLabel("Mingle"):AddDivider()
 
 local autoChokeholdEnabled = false
 local chokeholdConnection
 
-WinGroup:AddToggle("AutoChokehold", {
+MingleGroup:AddToggle("AutoChokehold", {
     Text = "Auto Chokehold",
     Tooltip = "Automatically completes chokehold QTEs",
     Default = false,
@@ -346,9 +349,10 @@ WinGroup:AddToggle("AutoChokehold", {
 })
 
 -- Dalgona Section
-WinGroup:AddLabel("Dalgona"):AddDivider()
+local DalgonaGroup = Tabs.Game:AddLeftGroupbox("Dalgona")
+DalgonaGroup:AddLabel("Dalgona"):AddDivider()
 
-WinGroup:AddButton({
+DalgonaGroup:AddButton({
     Text = "Complete Dalgona",
     Tooltip = "Instantly completes the Dalgona",
     Func = CompleteDalgona
@@ -357,7 +361,7 @@ WinGroup:AddButton({
 local dalgonaImmuneEnabled = false
 local originalDalgonaHook
 
-WinGroup:AddToggle("DalgonaImmune", {
+DalgonaGroup:AddToggle("DalgonaImmune", {
     Text = "Crack Immunity (Not sure if work)",
     Tooltip = "Prevents your dalgona from cracking",
     Default = false,
@@ -368,13 +372,14 @@ WinGroup:AddToggle("DalgonaImmune", {
 })
 
 -- Lights Out Section
-WinGroup:AddLabel("Lights Out"):AddDivider()
+local LightsOutGroup = Tabs.Game:AddRightGroupbox("Lights Out")
+LightsOutGroup:AddLabel("Lights Out"):AddDivider()
 
 local autoKillEnabled = false
 local autoKillConnection
 local currentTarget = nil
 
-WinGroup:AddToggle("AutoKill", {
+LightsOutGroup:AddToggle("AutoKill", {
     Text = "Auto Kill",
     Tooltip = "Automatically kills players",
     Default = false,
@@ -404,7 +409,7 @@ WinGroup:AddToggle("AutoKill", {
                         end
                     end
                     
-                    -- Equip tool if found
+                    -- Equip tool if needed
                     if tool and not character:FindFirstChild(tool.Name) then
                         tool.Parent = character
                     end
@@ -483,12 +488,13 @@ WinGroup:AddToggle("AutoKill", {
 })
 
 -- Hide and Seek Section
-WinGroup:AddLabel("Hide and Seek"):AddDivider()
+local HideSeekGroup = Tabs.Game:AddLeftGroupbox("Hide and Seek")
+HideSeekGroup:AddLabel("Hide and Seek"):AddDivider()
 
 local infiniteStaminaEnabled = false
 local staminaConnection
 
-WinGroup:AddToggle("InfiniteStamina", {
+HideSeekGroup:AddToggle("InfiniteStamina", {
     Text = "Infinite Stamina",
     Tooltip = "Keeps your stamina at maximum",
     Default = false,
@@ -541,7 +547,7 @@ WinGroup:AddToggle("InfiniteStamina", {
 local killHidersEnabled = false
 local killHidersConnection
 
-WinGroup:AddToggle("HiderKillaura", {
+HideSeekGroup:AddToggle("HiderKillaura", {
     Text = "Hider Killaura",
     Tooltip = "Automatically kills nearby hiders when you're a hunter",
     Default = false,
@@ -554,12 +560,13 @@ WinGroup:AddToggle("HiderKillaura", {
 })
 
 -- Tug of War Section
-WinGroup:AddLabel("Tug of War"):AddDivider()
+local TugOfWarGroup = Tabs.Game:AddRightGroupbox("Tug of War")
+TugOfWarGroup:AddLabel("Tug of War"):AddDivider()
 
 local autoPullEnabled = false
 local autoPullConnection
 
-WinGroup:AddToggle("AutoPullRope", {
+TugOfWarGroup:AddToggle("AutoPullRope", {
     Text = "Auto Pull Rope",
     Tooltip = "Automatically pulls the rope with perfect timing",
     Default = false,
@@ -593,8 +600,9 @@ WinGroup:AddToggle("AutoPullRope", {
 })
 
 -- Movement Section
-WinGroup:AddLabel("Movement"):AddDivider()
-WinGroup:AddButton({
+local MovementGroup = Tabs.Game:AddRightGroupbox("Movement")
+MovementGroup:AddLabel("Movement"):AddDivider()
+MovementGroup:AddButton({
     Text = "Unlock Dash",
     Tooltip = "Gives you Dash",
     Func = function()
@@ -607,7 +615,7 @@ WinGroup:AddButton({
     end
 })
 
--- Combat Tab
+-- ========== COMBAT TAB ==========
 local CombatGroup = Tabs.Combat:AddLeftGroupbox("Combat")
 CombatGroup:AddDivider()
 
@@ -995,7 +1003,7 @@ HitboxGroup:AddColorPicker("HitboxColor", {
     end
 })
 
--- Utility Tab
+-- ========== UTILITY TAB ==========
 local UtilityGroup = Tabs.Utility:AddLeftGroupbox("Power")
 UtilityGroup:AddDivider()
 
@@ -1243,7 +1251,7 @@ UtilityGroup2:AddToggle("SkipCutscenes", {
     end
 })
 
--- Misc Tab
+-- ========== MISC TAB ==========
 local MiscGroup = Tabs.Misc:AddLeftGroupbox("Safe")
 MiscGroup:AddDivider()
 local lastPosition = nil
@@ -1473,7 +1481,7 @@ MiscGroup2:AddToggle("NoClip", {
     end
 })
 
--- Visual Tab
+-- ========== VISUAL TAB ==========
 local VisualGroup = Tabs.Visual:AddLeftGroupbox("ESP")
 VisualGroup:AddDivider()
 
@@ -1595,7 +1603,7 @@ HideSeekGroup:AddToggle("DoorESP", {
     end
 })
 
--- UI Settings
+-- ========== UI SETTINGS TAB ==========
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "wrench")
 
 MenuGroup:AddToggle("KeybindMenuOpen", {
@@ -1674,7 +1682,7 @@ ThemeManager:ApplyToTab(Tabs["UI Settings"])
 -- which has been marked to be one that auto loads!
 SaveManager:LoadAutoloadConfig()
 
--- Functions (keep all the same functions from your original script)
+-- ========== ALL FUNCTIONS ==========
 local function PlayerAimbot()
     local RunService = game:GetService("RunService")
     local Camera = workspace.CurrentCamera
@@ -1733,12 +1741,12 @@ local function HandleRedLightGreenLight()
         end
     end)
     
-    -- Hook the RemoteEvent to prevent movement during red light
+    -- Hook the remote call
     local rawmt = getrawmetatable(game)
     setreadonly(rawmt, false)
     rlglModule._OriginalNamecall = rawmt.__namecall
     
-    rawmt.__namecall = newcclosure(function(instance, ...)
+    rawmt.__namecall = newcclosure(function(self, ...)
         local args = {...}
         local method = getnamecallmethod()
         
@@ -1746,11 +1754,11 @@ local function HandleRedLightGreenLight()
             if not rlglModule._IsGreenLight and rlglModule._LastRootPartCFrame then
                 -- Send cached position during red light
                 args[1] = rlglModule._LastRootPartCFrame
-                return rlglModule._OriginalNamecall(instance, unpack(args))
+                return rlglModule._OriginalNamecall(self, unpack(args))
             end
         end
         
-        return rlglModule._OriginalNamecall(instance, ...)
+        return rlglModule._OriginalNamecall(self, ...)
     end)
     
     -- Return cleanup function
@@ -2955,14 +2963,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         setupHitboxes()
     end
 end)
-
--- Theme & Save Setup (required for full UI functionality)
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-
-ThemeManager:LoadThemeFolder("ObsidianThemes")
-SaveManager:LoadSaveFolder("ObsidianSaves")
-SaveManager:BuildConfigSection(Tabs["UI Settings"])
 
 -- Final initialization call
 Library:OnLoad()
