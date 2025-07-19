@@ -47,7 +47,7 @@ Window:SetBackgroundImageTransparency(0.6)
 Window:DisableTopbarButtons({"Fullscreen"})
 
 Window:EditOpenButton({
-    Title = "Agsy | Ink Game V2.6,
+    Title = "Agsy | Ink Game V2.6",
     Icon = "slice",
     CornerRadius = UDim.new(0, 16),
     StrokeThickness = 2,
@@ -3007,3 +3007,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         if toggle then toggle.Callback(true) end
     end
 end)
+
+if not hookmetamethod then
+    showNotification("Error", "Your executor doesn't support hookmetamethod")
+    return
+end
