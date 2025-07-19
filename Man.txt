@@ -1,4 +1,9 @@
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+-- Converted from WindUI to Obsidian by DeepSeek Chat
+local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -23,341 +28,54 @@ local rlglModule = {
     _CleanupFunction = nil  -- Add this line
 }
 
-local Window = WindUI:CreateWindow({
+local Window = Library:CreateWindow({
     Title = "Agsy | Ink Game V2.5",
-    Icon = "rbxassetid://122545428580310",
-    IconThemed = true,
-    Author = "Agsy",
-    Folder = "InkGameAgsy",
+    Icon = 122545428580310,
+    Center = true,
+    AutoShow = true,
+    TabWidth = 160,
     Size = UDim2.fromOffset(580, 380),
-    Transparent = true,
-    Theme = "Red",
-    SideBarWidth = 200,
 })
 
-Window:SetBackgroundImage("rbxassetid://122545428580310")
-Window:SetBackgroundImageTransparency(0.6)
-Window:DisableTopbarButtons({"Fullscreen"})
+-- Apply theme
+ThemeManager:SetLibrary(Library)
+ThemeManager:SetFolder("InkGameAgsy")
+ThemeManager:ApplyToTab(Window.Tabs[1])
 
-Window:EditOpenButton({
-    Title = "Agsy | Ink Game V2.5",
-    Icon = "slice",
-    CornerRadius = UDim.new(0, 16),
-    StrokeThickness = 2,
-    Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 102, 102)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
-    }),
-    Enabled = true,
-    Draggable = true,
+-- Main Tab
+local MainTab = Window:AddTab("Main", "star")
+local UtilityTab = Window:AddTab("Utility", "settings")
+local MiscTab = Window:AddTab("Misc", "cctv")
+local CombatTab = Window:AddTab("Combat", "crosshair")
+local VisualTab = Window:AddTab("Visual", "eye")
+
+-- Important Section
+local ImportantGroup = MainTab:AddLeftGroupbox("Important")
+ImportantGroup:AddLabel("Join Discord To Know Updates!"):AddButton({
+    Text = "Copy Invite",
+    Func = function()
+        setclipboard("https://discord.gg/agsy")
+        Library:Notify("Discord invite copied!", 3)
+    end,
 })
 
-MainSection = Window:Section({
-    Title = "Main",
-    Opened = true,
+ImportantGroup:AddButton({
+    Text = "Visit YouTube",
+    Func = function()
+        setclipboard("https://www.youtube.com/@incrediblebread")
+        Library:Notify("YouTube link copied!", 3)
+    end,
 })
 
-local Discord = MainSection:Tab({
-    Title = "Important",
-    Icon = "bell",
-    ShowTabTitle = true,
-})
-
-local UpdateLogs = MainSection:Tab({
-    Title = "Update Logs",
-    Icon = "clipboard",
-    ShowTabTitle = true,
-})
-
-UpdateLogs:Paragraph({
-    Title = "Changelogs V2.5",
-    Desc = "[+] Added Guard ESP and Player ESP in Visuals Tab\n[+] Added Door ESP in Hide and Seek\n[+] Added Key ESP in Hide and Seek\n[~] Fixed Escape Door ESP in Hide and Seek Section\n[~] Fixed Reveal Safe Glasses\n[~] Fixed Auto Pull Rope in Tug Of War Section\n[+] Added Guard Hitbox Expander\n[+] Added Walkspeed and Jump Power Modifier",
-    Image = "rbxassetid://122545428580310",
-})
-
-GameSection = Window:Section({
-    Title = "Game",
-    Opened = true,
-})
-
-local Main = GameSection:Tab({
-    Title = "Win",
-    Icon = "star",
-    ShowTabTitle = true,
-})
-
-local Utility = GameSection:Tab({
-    Title = "Utility",
-    Icon = "settings",
-    ShowTabTitle = true,
-})
-
-local Misc = GameSection:Tab({
-    Title = "Misc",
-    Icon = "cctv",
-    ShowTabTitle = true,
-})
-
-local Combat = GameSection:Tab({
-    Title = "Combat",
-    Icon = "crosshair",
-    ShowTabTitle = true,
-})
-
-local Visual = GameSection:Tab({
-    Title = "Visual",
-    Icon = "eye",
-    ShowTabTitle = true,
-    Locked = false
-})
-
-local lplr = game:GetService("Players").LocalPlayer
-
--- Function to show WindUI notification
-local function showNotification(title, message)
-    WindUI:Notify({
-        Title = title,
-        Description = message,
-        Duration = 5,
-        Callback = function() end
-    })
-end
-
--- Anti-Cheat Bypass Function
-local function PatchFlingAnticheat()
-    showNotification("Anti-Cheat", "Bypassing AntiCheat...")
-    
-    local char = lplr.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    -- Patch unwanted states/folders
-    local anticheatStates = { "Stun", "Anchor", "RotateDisabled", "CantRun", "InCutscene", "DisableHeadLookAt" }
-    char.ChildAdded:Connect(function(child)
-        if table.find(anticheatStates, child.Name) then
-            child:Destroy()
-        end
-    end)
-
-    -- Patch metatable to prevent anchoring
-    local mt = getrawmetatable(root)
-    local oldNewIndex = mt.__newindex
-    setreadonly(mt, false)
-    mt.__newindex = function(self, key, value)
-        if self == root and key == "Anchored" and value == true then
-            -- Block anchoring
-            return
-        end
-        return oldNewIndex(self, key, value)
-    end
-    setreadonly(mt, true)
-end
-
--- Initial patch
-PatchFlingAnticheat()
-
--- Patch when character respawns
-game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-    PatchFlingAnticheat()
-end)
-
-local function HandleRedLightGreenLight()
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local Client = Players.LocalPlayer
-    
-    -- Track traffic light state and player position
-    rlglModule._Connection = ReplicatedStorage.Remotes.Effects.OnClientEvent:Connect(function(EffectsData)
-        if EffectsData.EffectName ~= "TrafficLight" then return end
-        
-        rlglModule._IsGreenLight = EffectsData.GreenLight == true
-        
-        local rootPart = Client.Character and Client.Character:FindFirstChild("HumanoidRootPart")
-        if rootPart then
-            rlglModule._LastRootPartCFrame = rootPart.CFrame
-        end
-    end)
-    
-    -- Hook the RemoteEvent to prevent movement during red light
-    local rawmt = getrawmetatable(game)
-    setreadonly(rawmt, false)
-    rlglModule._OriginalNamecall = rawmt.__namecall
-    
-    rawmt.__namecall = newcclosure(function(instance, ...)
-        local args = {...}
-        local method = getnamecallmethod()
-        
-        if method == "FireServer" and instance.ClassName == "RemoteEvent" and instance.Name == "rootCFrame" then
-            if not rlglModule._IsGreenLight and rlglModule._LastRootPartCFrame then
-                -- Send cached position during red light
-                args[1] = rlglModule._LastRootPartCFrame
-                return rlglModule._OriginalNamecall(instance, unpack(args))
-            end
-        end
-        
-        return rlglModule._OriginalNamecall(instance, ...)
-    end)
-    
-    -- Return cleanup function
-    return function()
-        if rlglModule._Connection then
-            rlglModule._Connection:Disconnect()
-            rlglModule._Connection = nil
-        end
-        
-        if rawmt and rlglModule._OriginalNamecall then
-            setreadonly(rawmt, false)
-            rawmt.__namecall = rlglModule._OriginalNamecall
-            setreadonly(rawmt, true)
-            rlglModule._OriginalNamecall = nil
-        end
-    end
-end
-
--- Automatic Anti-Ban for Teleporting (exact implementation as requested)
-local originalNamecall
-local LastPosition
-
-local function enablePositionFreeze()
-    -- Store original metatable function
-    local rawmt = getrawmetatable(game)
-    setreadonly(rawmt, false)
-    originalNamecall = rawmt.__namecall
-    
-    -- Continuously update last position
-    game:GetService("RunService").Heartbeat:Connect(function()
-        local char = game.Players.LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            LastPosition = char.HumanoidRootPart.CFrame
-        end
-    end)
-
-    -- The hook that freezes position
-    rawmt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-
-        if method == "FireServer" 
-           and self.Name == "rootCFrame" 
-           and self.ClassName == "RemoteEvent" 
-           and LastPosition then
-            args[1] = LastPosition  -- Always send last recorded position
-            return originalNamecall(self, unpack(args))
-        end
-        
-        return originalNamecall(self, ...)
-    end)
-end
-
--- Activate the position freeze immediately
-enablePositionFreeze()
-
--- Safer fling implementation
-local function fling()
-    local lp = Players.LocalPlayer
-    local character = lp.Character or lp.CharacterAdded:Wait()
-    local hrp = character:WaitForChild("HumanoidRootPart")
-    
-    while hiddenfling do
-        RunService.Heartbeat:Wait()
-        if hiddenfling then
-            local originalVelocity = hrp.Velocity
-            hrp.Velocity = originalVelocity * 1.5 + Vector3.new(0, flingPower, 0)
-            RunService.RenderStepped:Wait()
-            hrp.Velocity = originalVelocity * 0.8
-            RunService.Stepped:Wait()
-            hrp.Velocity = originalVelocity + Vector3.new(0, movel, 0)
-            movel = -movel
-        end
-    end
-end
-
-local function getClosestNPC()
-    local closestNPC = nil
-    local closestDistance = math.huge
-    local character = Players.LocalPlayer.Character
-
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
-
-    local playerPos = character.HumanoidRootPart.Position
-    local targetPatterns = {"guard", "squid", "triangle", "square"}
-
-    for _, model in ipairs(workspace.Live:GetChildren()) do
-        if model:IsA("Model") then
-            local modelName = model.Name:lower()
-            local isTarget = false
-
-            for _, pattern in ipairs(targetPatterns) do
-                if modelName:find(pattern) then
-                    isTarget = true
-                    break
-                end
-            end
-
-            if isTarget then
-                local hrp = model:FindFirstChild("HumanoidRootPart")
-                local humanoid = model:FindFirstChildOfClass("Humanoid")
-
-                if hrp and humanoid and humanoid.Health > 0 then
-                    local distance = (hrp.Position - playerPos).Magnitude
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        closestNPC = model
-                    end
-                end
-            end
-        end
-    end
-    return closestNPC
-end
-
-local function aimbotRebel()
-    local closestNPC = getClosestNPC()
-    if closestNPC then
-        local targetPart = closestNPC:FindFirstChild("Head") or closestNPC:FindFirstChild("HumanoidRootPart")
-        if targetPart then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-        end
-    end
-end
-
-local function CopyDiscordInvite()
-    setclipboard("https://discord.gg/agsy")
-end
-
-Discord:Paragraph({
-    Title = "Join Discord To Know Updates!",
-    Desc = "Stay updated with the latest features and fixes",
-    Image = "rbxassetid://122545428580310",
-    Thumbnail = "rbxassetid://122545428580310",
-    Buttons = {
-        {
-            Title = "Copy Invite",
-            Icon = "clipboard",
-            Callback = CopyDiscordInvite,
-            Variant = "Primary"
-        },
-        {
-            Title = "Visit YouTube",
-            Icon = "youtube",
-            Callback = function() 
-                setclipboard("https://www.youtube.com/@incrediblebread")
-            end,
-            Variant = "Secondary"
-        }
-    }
-})
-
+-- Anti Ban
 local antiBanActive = false
-
-Discord:Button({
-    Title = "Anti Ban",
-    Callback = function()
+ImportantGroup:AddToggle("AntiBanToggle", {
+    Text = "Anti Ban",
+    Tooltip = "Protects against anti-cheat detection",
+    Default = false,
+    Callback = function(state)
         if antiBanActive then return end
+        antiBanActive = true
         
         -- Initialize anti-ban protection
         local rawmt = getrawmetatable(game)
@@ -410,19 +128,16 @@ Discord:Button({
         end)
         
         setreadonly(rawmt, true)
-        antiBanActive = true
-        
+        Library:Notify("Anti-Ban protection activated", 5)
     end
 })
 
--- Game Tab
-Main:Section({Title = "OP"})
-Main:Divider()
-
-Main:Toggle({
-    Title = "Touch Fling",
-    Desc = "Fling anyone who touches you",
-    Value = false,
+-- OP Section
+local OPSection = MainTab:AddRightGroupbox("OP")
+OPSection:AddToggle("TouchFlingToggle", {
+    Text = "Touch Fling",
+    Tooltip = "Fling anyone who touches you",
+    Default = false,
     Callback = function(state)
         hiddenfling = state
         if state then
@@ -431,12 +146,33 @@ Main:Toggle({
     end
 })
 
+-- Fling function
+local function fling()
+    local lp = Players.LocalPlayer
+    local character = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart")
+    
+    while hiddenfling do
+        RunService.Heartbeat:Wait()
+        if hiddenfling then
+            local originalVelocity = hrp.Velocity
+            hrp.Velocity = originalVelocity * 1.5 + Vector3.new(0, flingPower, 0)
+            RunService.RenderStepped:Wait()
+            hrp.Velocity = originalVelocity * 0.8
+            RunService.Stepped:Wait()
+            hrp.Velocity = originalVelocity + Vector3.new(0, movel, 0)
+            movel = -movel
+        end
+    end
+end
+
+-- Anti-Fling
 local antiFlingEnabled = false
 local antiFlingConnection
-Main:Toggle({
-    Title = "Anti-Fling",
-    Desc = "Stops other players from flinging you",
-    Value = false,
+OPSection:AddToggle("AntiFlingToggle", {
+    Text = "Anti-Fling",
+    Tooltip = "Stops other players from flinging you",
+    Default = false,
     Callback = function(state)
         antiFlingEnabled = state
         if state then
@@ -471,11 +207,10 @@ Main:Toggle({
 })
 
 -- Red Light Green Light Section
-Main:Section({Title = "Red Light Green Light"})
-Main:Divider()
-Main:Button({
-    Title = "Complete Red Light Green Light",
-    Callback = function()
+local RLGLGroup = MainTab:AddLeftGroupbox("Red Light Green Light")
+RLGLGroup:AddButton({
+    Text = "Complete RLGL",
+    Func = function()
         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
             hrp.CFrame = CFrame.new(-46, 1024, 110)
@@ -514,74 +249,18 @@ local function SetRLGLGodmode(enabled)
     end
 end
 
-Main:Toggle({
-    Title = "Godmode",
-    Desc = "Prevents detection during red light",
-    Value = false,
+RLGLGroup:AddToggle("RLGLGodmodeToggle", {
+    Text = "Godmode",
+    Tooltip = "Prevents detection during red light",
+    Default = false,
     Callback = function(state)
         rlglGodmodeEnabled = state
         SetRLGLGodmode(state)
     end
 })
 
-local saveInjuredEnabled = false
-local saveInjuredConnection
-
-local function FindInjuredPlayer()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local prompt = hrp:FindFirstChild("CarryPrompt")
-                if prompt and not player.Character:FindFirstChild("IsBeingHeld") then
-                    return player, prompt
-                end
-            end
-        end
-    end
-end
-
-local function TransportInjuredPlayer()
-    local injuredPlayer, prompt = FindInjuredPlayer()
-    if not injuredPlayer then return end
-
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
-    -- Carry player
-    char:PivotTo(injuredPlayer.Character:GetPrimaryPartCFrame())
-    fireproximityprompt(prompt)
-    task.wait(0.2)
-
-    -- Move to finish (-100.8, 1030, 115)
-    char:PivotTo(CFrame.new(-100.8, 1030, 115))
-    task.wait(0.2)
-
-    -- Release player
-    game:GetService("ReplicatedStorage").Remotes.ClickedButton:FireServer({tryingtoleave = true})
-end
-
-local function AutoSaveInjured()
-    while saveInjuredEnabled do
-        TransportInjuredPlayer()
-        task.wait(1) -- Check every second to prevent spamming
-    end
-end
-
-Main:Toggle({
-    Title = "Save Injured Players",
-    Desc = "Automatically carries injured players to safety",
-    Value = false,
-    Callback = function(state)
-        saveInjuredEnabled = state
-        if state then
-            coroutine.wrap(AutoSaveInjured)()
-        end
-    end
-
 -- Glass Bridge Section
-Main:Section({Title = "Glass Bridge"})
-Main:Divider()
+local GlassBridgeGroup = MainTab:AddRightGroupbox("Glass Bridge")
 
 -- Reveal Safe Glass
 local glassESPEnabled = false
@@ -625,10 +304,10 @@ local function RevealGlassBridge()
     end
 end
 
-Main:Toggle({
-    Title = "Reveal Safe Glass",
-    Desc = "Shows safe (green) and breakable (red) tiles",
-    Value = false,
+GlassBridgeGroup:AddToggle("GlassESPToggle", {
+    Text = "Reveal Safe Glass",
+    Tooltip = "Shows safe (green) and breakable (red) tiles",
+    Default = false,
     Callback = function(state)
         glassESPEnabled = state
         if state then
@@ -649,10 +328,9 @@ Main:Toggle({
     end
 })
 
-Main:Button({
-    Title = "Teleport to End of Bridge",
-    Desc = "Instantly completes the glass bridge",
-    Callback = function()
+GlassBridgeGroup:AddButton({
+    Text = "Teleport to End",
+    Func = function()
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             char:PivotTo(CFrame.new(-203.9, 520.7, -1534.3485) + Vector3.new(0, 5, 0))
@@ -660,8 +338,8 @@ Main:Button({
     end
 })
 
-Main:Section({Title = "Mingle"})
-Main:Divider()
+-- Mingle Section
+local MingleGroup = MainTab:AddLeftGroupbox("Mingle")
 
 -- Auto Chokehold
 local autoChokeholdEnabled = false
@@ -680,10 +358,10 @@ local function AutoMingle()
     end
 end
 
-Main:Toggle({
-    Title = "Auto Chokehold",
-    Desc = "Automatically completes chokehold QTEs",
-    Value = false,
+MingleGroup:AddToggle("AutoChokeholdToggle", {
+    Text = "Auto Chokehold",
+    Tooltip = "Automatically completes chokehold QTEs",
+    Default = false,
     Callback = function(state)
         autoChokeholdEnabled = state
         if state then
@@ -693,8 +371,7 @@ Main:Toggle({
 })
 
 -- Dalgona Section
-Main:Section({Title = "Dalgona"})
-Main:Divider()
+local DalgonaGroup = MainTab:AddRightGroupbox("Dalgona")
 
 local function CompleteDalgona()
     local DalgonaClientModule = game.ReplicatedStorage.Modules.Games.DalgonaClient
@@ -711,11 +388,9 @@ local function CompleteDalgona()
     end
 end
 
-Main:Button({
-    Title = "Complete Dalgona",
-    Desc = "Instantly completes the Dalgona",
-    Locked = false,
-    Callback = CompleteDalgona
+DalgonaGroup:AddButton({
+    Text = "Complete Dalgona",
+    Func = CompleteDalgona
 })
 
 -- Crack Immunity
@@ -737,27 +412,27 @@ local function SetDalgonaImmune(enabled)
     end
 end
 
-Main:Toggle({
-    Title = "Crack Immunity",
-    Desc = "Prevents your dalgona from cracking",
-    Value = false,
+DalgonaGroup:AddToggle("DalgonaImmuneToggle", {
+    Text = "Crack Immunity",
+    Tooltip = "Prevents your dalgona from cracking",
+    Default = false,
     Callback = function(state)
         dalgonaImmuneEnabled = state
         SetDalgonaImmune(state)
     end
 })
 
-Main:Section({Title = "Lights Out"})
-Main:Divider()
+-- Lights Out Section
+local LightsOutGroup = MainTab:AddLeftGroupbox("Lights Out")
 
 local autoKillEnabled = false
 local autoKillConnection
 local currentTarget = nil
 
-Main:Toggle({
-    Title = "Auto Kill",
-    Desc = "Automatically kills players",
-    Value = false,
+LightsOutGroup:AddToggle("AutoKillToggle", {
+    Text = "Auto Kill",
+    Tooltip = "Automatically kills players",
+    Default = false,
     Callback = function(state)
         autoKillEnabled = state
         if state then
@@ -863,17 +538,15 @@ Main:Toggle({
 })
 
 -- Hide and Seek Section
-Main:Section({Title = "Hide and Seek"})
-Main:Divider()
+local HideSeekGroup = MainTab:AddRightGroupbox("Hide and Seek")
 
--- Improved Infinite Stamina Toggle
+-- Infinite Stamina
 local infiniteStaminaEnabled = false
 local staminaConnection
-
-Main:Toggle({
-    Title = "Infinite Stamina",
-    Desc = "Keeps your stamina at maximum",
-    Value = false,
+HideSeekGroup:AddToggle("InfiniteStaminaToggle", {
+    Text = "Infinite Stamina",
+    Tooltip = "Keeps your stamina at maximum",
+    Default = false,
     Callback = function(state)
         infiniteStaminaEnabled = state
         if state then
@@ -920,151 +593,24 @@ Main:Toggle({
     end
 })
 
--- ESP Variables
+-- ESP Hiders
 local hiderESPEnabled = false
-local hunterESPEnabled = false
 local hiderHighlights = {}
-local hunterHighlights = {}
-
--- ESP Functions (exactly as you provided)
-local function HiderESP(player)
-    if player:GetAttribute("IsHider") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hiderHighlights[player] then
-            hiderHighlights[player]:Destroy()
-            hiderHighlights[player] = nil
-        end
-
-        if not hiderESPEnabled then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green for hiders
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hiderHighlights[player] = highlight
-
-        -- Cleanup when player is no longer a hider
-        player:GetAttributeChangedSignal("IsHider"):Connect(function()
-            if hiderHighlights[player] then 
-                hiderHighlights[player]:Destroy()
-                hiderHighlights[player] = nil
-            end
-        end)
-    end
-end
-
-local function HunterESP(player)
-    if player:GetAttribute("IsHunter") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        -- Clear existing highlight if any
-        if hunterHighlights[player] then
-            hunterHighlights[player]:Destroy()
-            hunterHighlights[player] = nil
-        end
-
-        if not hunterESPEnabled then return end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Adornee = player.Character
-        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for hunters
-        highlight.OutlineColor = Color3.new(1, 1, 1)
-        highlight.FillTransparency = 0.5
-        highlight.Parent = player.Character
-        hunterHighlights[player] = highlight
-
-        -- Cleanup when player is no longer a hunter
-        player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-            if hunterHighlights[player] then 
-                hunterHighlights[player]:Destroy()
-                hunterHighlights[player] = nil
-            end
-        end)
-    end
-end
-
--- Apply ESP to all players
-local function ApplyHideAndSeekESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-end
-
--- Cleanup all ESP
-local function CleanupHideAndSeekESP()
-    for player, highlight in pairs(hiderHighlights) do
-        if highlight then highlight:Destroy() end
-    end
-    for player, highlight in pairs(hunterHighlights) do
-        if highlight then highlight:Destroy() end
-    end
-    table.clear(hiderHighlights)
-    table.clear(hunterHighlights)
-end
-
--- Player Added/Removed Handlers
-local function OnPlayerAdded(player)
-    if player ~= LocalPlayer then
-        HiderESP(player)
-        HunterESP(player)
-    end
-end
-
-local function OnPlayerRemoving(player)
-    if hiderHighlights[player] then
-        hiderHighlights[player]:Destroy()
-        hiderHighlights[player] = nil
-    end
-    if hunterHighlights[player] then
-        hunterHighlights[player]:Destroy()
-        hunterHighlights[player] = nil
-    end
-end
-
--- Initialize ESP connections
-local function InitializeESP()
-    -- Cleanup existing ESP
-    CleanupHideAndSeekESP()
-    
-    -- Apply to existing players
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            HiderESP(player)
-            HunterESP(player)
-        end
-    end
-    
-    -- Connect signals
-    Players.PlayerAdded:Connect(OnPlayerAdded)
-    Players.PlayerRemoving:Connect(OnPlayerRemoving)
-    
-    -- Track attribute changes
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            player:GetAttributeChangedSignal("IsHider"):Connect(function()
-                HiderESP(player)
-            end)
-            player:GetAttributeChangedSignal("IsHunter"):Connect(function()
-                HunterESP(player)
-            end)
-        end
-    end
-end
-
--- Toggles
-Main:Toggle({
-    Title = "ESP Hiders",
-    Desc = "Highlights hiders in green",
-    Value = false,
+HideSeekGroup:AddToggle("HiderESPToggle", {
+    Text = "ESP Hiders",
+    Tooltip = "Highlights hiders in green",
+    Default = false,
     Callback = function(state)
         hiderESPEnabled = state
         if state then
-            InitializeESP()
+            -- Initialize ESP
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    HiderESP(player)
+                end
+            end
         else
-            -- Only clean up hider highlights
+            -- Clean up hider highlights
             for player, highlight in pairs(hiderHighlights) do
                 if highlight then highlight:Destroy() end
             end
@@ -1073,16 +619,24 @@ Main:Toggle({
     end
 })
 
-Main:Toggle({
-    Title = "ESP Hunters",
-    Desc = "Highlights hunters in red",
-    Value = false,
+-- ESP Hunters
+local hunterESPEnabled = false
+local hunterHighlights = {}
+HideSeekGroup:AddToggle("HunterESPToggle", {
+    Text = "ESP Hunters",
+    Tooltip = "Highlights hunters in red",
+    Default = false,
     Callback = function(state)
         hunterESPEnabled = state
         if state then
-            InitializeESP()
+            -- Initialize ESP
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer then
+                    HunterESP(player)
+                end
+            end
         else
-            -- Only clean up hunter highlights
+            -- Clean up hunter highlights
             for player, highlight in pairs(hunterHighlights) do
                 if highlight then highlight:Destroy() end
             end
@@ -1091,44 +645,51 @@ Main:Toggle({
     end
 })
 
-local killHidersEnabled = false
-local killHidersConnection
-
-local function KillHiders()
-    while killHidersEnabled do
-        task.wait(0.25) -- Slight delay between checks
-        
-        local hider = nil
-        -- Find nearest alive hider using IsHider attribute
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player:GetAttribute("IsHider") and 
-               player.Character and player.Character:FindFirstChild("Humanoid") and 
-               player.Character.Humanoid.Health > 0 then
-                hider = player
-                break
-            end
-        end
-
-        if hider and hider.Character and hider.Character:FindFirstChild("HumanoidRootPart") then
-            -- Teleport to hider
-            LocalPlayer.Character:PivotTo(hider.Character:GetPrimaryPartCFrame())
-            task.wait(0.2)
-            
-            -- Fire knife remote to kill
-            local knife = LocalPlayer.Character:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
-            if knife then
-                LocalPlayer.Character.Humanoid:EquipTool(knife)
-                local args = { "UsingMoveCustom", knife, nil, { Clicked = true } }
-                game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-            end
-        end
+-- ESP Key
+local keyESPEnabled = false
+local keyESPConnections = {}
+local keyHighlights = {}
+HideSeekGroup:AddToggle("KeyESPToggle", {
+    Text = "ESP Key",
+    Tooltip = "Highlights keys in Hide and Seek",
+    Default = false,
+    Callback = function(state)
+        keyESPEnabled = state
+        SetupKeyESP()
     end
-end
+})
 
-Main:Toggle({
-    Title = "Hider Killaura",
-    Desc = "Automatically kills nearby hiders when you're a hunter",
-    Value = false,
+-- ESP Escape Doors
+local escapeDoorESPEnabled = false
+local escapeDoorHighlights = {}
+HideSeekGroup:AddToggle("EscapeDoorESPToggle", {
+    Text = "ESP Escape Doors",
+    Tooltip = "Highlights escape doors in Hide and Seek",
+    Default = false,
+    Callback = function(state)
+        escapeDoorESPEnabled = state
+        SetupEscapeDoorESP()
+    end
+})
+
+-- ESP Door and Required Key
+local doorESPEnabled = false
+HideSeekGroup:AddToggle("DoorESPToggle", {
+    Text = "ESP Door and Required Key",
+    Tooltip = "Highlights doors and shows required key",
+    Default = false,
+    Callback = function(state)
+        doorESPEnabled = state
+        SetupDoorESP()
+    end
+})
+
+-- Hider Killaura
+local killHidersEnabled = false
+HideSeekGroup:AddToggle("HiderKillauraToggle", {
+    Text = "Hider Killaura",
+    Tooltip = "Automatically kills nearby hiders when you're a hunter",
+    Default = false,
     Callback = function(state)
         killHidersEnabled = state
         if state then
@@ -1137,333 +698,16 @@ Main:Toggle({
     end
 })
 
--- Add Key ESP toggle
-local keyESPEnabled = false
-local keyESPConnections = {}
-local keyHighlights = {}
-
-local function KeyESP(keyModel)
-    if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
-        return
-    end
-
-    -- Create Highlight for the key
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "KeyESP"
-    highlight.Adornee = keyModel
-    highlight.FillColor = Color3.fromRGB(255, 255, 0)  -- Yellow color for keys
-    highlight.OutlineColor = Color3.fromRGB(255, 215, 0) -- Gold outline
-    highlight.FillTransparency = 0.3
-    highlight.OutlineTransparency = 0
-    highlight.Parent = keyModel
-    keyHighlights[keyModel] = highlight
-
-    -- Clean up if the key is destroyed or removed
-    local connection
-    connection = keyModel.AncestryChanged:Connect(function(_, parent)
-        if not parent or not keyModel:IsDescendantOf(game) then
-            if highlight and highlight.Parent then
-                highlight:Destroy()
-            end
-            if connection then
-                connection:Disconnect()
-            end
-            keyHighlights[keyModel] = nil
-        end
-    end)
-
-    keyESPConnections[keyModel] = connection
-end
-
-local function SetupKeyESP()
-    -- Clear existing highlights and connections
-    for key, highlight in pairs(keyHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(keyHighlights)
-    
-    for key, conn in pairs(keyESPConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(keyESPConnections)
-
-    if not keyESPEnabled then return end
-
-    -- Scan existing keys in workspace
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name:lower():find("key") and obj:IsA("Model") then
-            KeyESP(obj)
-        end
-    end
-
-    -- Listen for new keys
-    keyESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj.Name:lower():find("key") and obj:IsA("Model") then
-            KeyESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Key",
-    Desc = "Highlights keys in Hide and Seek",
-    Value = false,
-    Callback = function(state)
-        keyESPEnabled = state
-        SetupKeyESP()
-    end
-})
-
--- Improved Escape Door ESP
-local escapeDoorESPEnabled = false
-local escapeDoorHighlights = {}
-local escapeDoorBillboards = {}
-local escapeDoorConnections = {}
-
-local function EscapeDoorESP(door)
-    -- Validate the door object
-    if not door or not door:IsA("Model") then return end
-    if not door.PrimaryPart then return end
-    
-    -- Check if this door already has ESP
-    if escapeDoorHighlights[door] or escapeDoorBillboards[door] then return end
-
-    -- Create visual elements
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = door
-    highlight.FillColor = Color3.fromRGB(0, 255, 0)  -- Green for escape
-    highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
-    highlight.FillTransparency = 0.4
-    highlight.OutlineTransparency = 0
-    highlight.Parent = door
-    escapeDoorHighlights[door] = highlight
-
-    -- Add a floating text label
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = door.PrimaryPart
-    billboard.Size = UDim2.new(0, 100, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Text = "ESCAPE DOOR"
-    label.TextColor3 = Color3.fromRGB(0, 255, 0)
-    label.TextSize = 14
-    label.Font = Enum.Font.Oswald
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Parent = billboard
-    billboard.Parent = door
-    escapeDoorBillboards[door] = billboard
-
-    -- Cleanup function
-    local function cleanup()
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-        escapeDoorHighlights[door] = nil
-        escapeDoorBillboards[door] = nil
-    end
-
-    -- Auto-cleanup when door is removed
-    escapeDoorConnections[door] = door.AncestryChanged:Connect(function(_, parent)
-        if not parent then cleanup() end
-    end)
-end
-
-local function SetupEscapeDoorESP()
-    -- Clear existing ESP
-    for door, highlight in pairs(escapeDoorHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(escapeDoorHighlights)
-    
-    for door, billboard in pairs(escapeDoorBillboards) do
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-    end
-    table.clear(escapeDoorBillboards)
-    
-    for door, conn in pairs(escapeDoorConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(escapeDoorConnections)
-
-    if not escapeDoorESPEnabled then return end
-
-    -- Check existing doors
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name == "EXITDOOR" then
-            EscapeDoorESP(obj)
-        end
-    end
-
-    -- Monitor for new doors
-    escapeDoorConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj.Name == "EXITDOOR" then
-            EscapeDoorESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Escape Doors",
-    Desc = "Highlights escape doors in Hide and Seek",
-    Value = false,
-    Callback = function(state)
-        escapeDoorESPEnabled = state
-        SetupEscapeDoorESP()
-    end
-})
-
--- Add Door ESP toggle
-local doorESPEnabled = false
-local doorESPConnections = {}
-local doorHighlights = {}
-local doorBillboards = {}
-
-local function DoorESP(door)
-    if not door:IsA("Model") or not door.PrimaryPart then return end
-    
-    -- Only target door models (adjust names as needed)
-    if not (door.Name:find("Door") or door.Name:find("door")) then return end
-
-    -- Clear existing ESP if any
-    if doorHighlights[door] then
-        doorHighlights[door]:Destroy()
-        doorHighlights[door] = nil
-    end
-    if doorBillboards[door] then
-        doorBillboards[door]:Destroy()
-        doorBillboards[door] = nil
-    end
-
-    if not doorESPEnabled then return end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "DoorESP"
-    highlight.Adornee = door
-    highlight.FillColor = Color3.fromRGB(255, 165, 0)  -- Orange
-    highlight.OutlineColor = Color3.fromRGB(255, 100, 0)
-    highlight.FillTransparency = 0.6
-    highlight.Parent = door
-    doorHighlights[door] = highlight
-
-    -- Show required key if available
-    local keyNeeded = door:GetAttribute("KeyNeeded") or "Unknown"
-    local billboard = Instance.new("BillboardGui")
-    billboard.Adornee = door.PrimaryPart
-    billboard.Size = UDim2.new(0, 150, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Text = "DOOR (Key: "..keyNeeded..")"
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 14
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.Parent = billboard
-    billboard.Parent = door
-    doorBillboards[door] = billboard
-
-    -- Cleanup function
-    local function cleanup()
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-        doorHighlights[door] = nil
-        doorBillboards[door] = nil
-    end
-
-    -- Auto-cleanup when door is removed
-    doorESPConnections[door] = door.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            cleanup()
-            if doorESPConnections[door] then
-                doorESPConnections[door]:Disconnect()
-                doorESPConnections[door] = nil
-            end
-        end
-    end)
-end
-
-local function SetupDoorESP()
-    -- Clear existing ESP
-    for door, highlight in pairs(doorHighlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    table.clear(doorHighlights)
-    
-    for door, billboard in pairs(doorBillboards) do
-        if billboard and billboard.Parent then
-            billboard:Destroy()
-        end
-    end
-    table.clear(doorBillboards)
-    
-    for door, conn in pairs(doorESPConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(doorESPConnections)
-
-    if not doorESPEnabled then return end
-
-    -- Find existing doors
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            DoorESP(obj)
-        end
-    end
-
-    -- Detect new doors
-    doorESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("Model") then
-            DoorESP(obj)
-        end
-    end)
-end
-
-Main:Toggle({
-    Title = "ESP Door and Required Key",
-    Desc = "Highlights doors and shows required key",
-    Value = false,
-    Callback = function(state)
-        doorESPEnabled = state
-        SetupDoorESP()
-    end
-})
-
 -- Tug of War Section
-Main:Section({Title = "Tug of War"})
-Main:Divider()
+local TugOfWarGroup = MainTab:AddLeftGroupbox("Tug of War")
 
+-- Auto Pull Rope
 local autoPullEnabled = false
 local autoPullConnection
-
-Main:Toggle({
-    Title = "Auto Pull Rope",
-    Desc = "Automatically pulls the rope with perfect timing",
-    Value = false,
+TugOfWarGroup:AddToggle("AutoPullToggle", {
+    Text = "Auto Pull Rope",
+    Tooltip = "Automatically pulls the rope with perfect timing",
+    Default = false,
     Callback = function(state)
         autoPullEnabled = state
         if state then
@@ -1494,12 +738,10 @@ Main:Toggle({
 })
 
 -- Movement Section
-Main:Section({Title = "Movement"})
-Main:Divider()
-Main:Button({
-    Title = "Unlock Dash",
-    Desc = "Gives you Dash",
-    Callback = function()
+local MovementGroup = MainTab:AddRightGroupbox("Movement")
+MovementGroup:AddButton({
+    Text = "Unlock Dash",
+    Func = function()
         pcall(function()
             local boosts = game:GetService("Players").LocalPlayer:WaitForChild("Boosts")
             if boosts:FindFirstChild("Faster Sprint") then
@@ -1510,13 +752,11 @@ Main:Button({
 })
 
 -- Combat Tab
-Combat:Section({Title = "Combat"})
-Combat:Divider()
+local CombatMainGroup = CombatTab:AddLeftGroupbox("Combat")
 
-Combat:Button({
-    Title = "Kill All",
-    Desc = "Fling all players in the server",
-    Callback = function()
+CombatMainGroup:AddButton({
+    Text = "Kill All",
+    Func = function()
         local Player = Players.LocalPlayer
         local Character = Player.Character
         local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
@@ -1670,42 +910,13 @@ Combat:Button({
     end
 })
 
--- Guard Aimbot Toggle
+-- Guard Aimbot
 local guardAimbotEnabled = false
 local guardAimbotCleanup
-
-local function IsGuard(model)
-    return model:IsA("Model") and 
-           model:FindFirstChild("TypeOfGuard") and 
-           (model.Name:find("Rebel") or model.Name:find("Guard")) and
-           model:FindFirstChild("Humanoid") and 
-           model.Humanoid.Health > 0
-end
-
-local function GetNearestGuard()
-    local closest, dist = nil, math.huge
-    local lroot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not lroot then return end
-
-    for _, model in pairs(workspace.Live:GetChildren()) do
-        if IsGuard(model) then
-            local guardRoot = model:FindFirstChild("HumanoidRootPart")
-            if guardRoot then
-                local distance = (guardRoot.Position - lroot.Position).Magnitude
-                if distance < dist then
-                    closest = guardRoot
-                    dist = distance
-                end
-            end
-        end
-    end
-    return closest
-end
-
-Combat:Toggle({
-    Title = "Guard Aimbot",
-    Desc = "Automatically aims at the nearest guard",
-    Value = false,
+CombatMainGroup:AddToggle("GuardAimbotToggle", {
+    Text = "Guard Aimbot",
+    Tooltip = "Automatically aims at the nearest guard",
+    Default = false,
     Callback = function(state)
         guardAimbotEnabled = state
         if state then
@@ -1730,12 +941,13 @@ Combat:Toggle({
     end
 })
 
+-- Bring Guards
 local bringGuardsEnabled = false
 local bringGuardsConnection
-Combat:Toggle({
-    Title = "Bring Guards",
-    Desc = "Brings Guards",
-    Value = false,
+CombatMainGroup:AddToggle("BringGuardsToggle", {
+    Text = "Bring Guards",
+    Tooltip = "Brings Guards to your position",
+    Default = false,
     Callback = function(state)
         bringGuardsEnabled = state
         if state then
@@ -1779,10 +991,11 @@ Combat:Toggle({
     end
 })
 
-Combat:Toggle({
-    Title = "MP5 Mods",
-    Desc = "Improved bullets, reduced spread, faster fire",
-    Value = false,
+-- MP5 Mods
+CombatMainGroup:AddToggle("MP5ModsToggle", {
+    Text = "MP5 Mods",
+    Tooltip = "Improved bullets, reduced spread, faster fire",
+    Default = false,
     Callback = function(state)
         local MP5 = game:GetService("ReplicatedStorage").Weapons.Guns:FindFirstChild("MP5")
         if MP5 then
@@ -1801,69 +1014,13 @@ Combat:Toggle({
     end
 })
 
+-- Kill Aura
 local killAuraEnabled = false
 local killAuraConnection
-local validWeapons = {"Fork", "Bottle", "Knife", "Power Hold"}
-
-local function GetWeapon()
-    local char = LocalPlayer.Character
-    if not char then return end
-    
-    for _, weaponName in pairs(validWeapons) do
-        local weapon = char:FindFirstChild(weaponName) or LocalPlayer.Backpack:FindFirstChild(weaponName)
-        if weapon then return weapon end
-    end
-end
-
-local function GetNearestEnemy(maxDist)
-    local closest, dist = nil, maxDist or 15
-    local lroot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not lroot then return end
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            local hum = player.Character:FindFirstChild("Humanoid")
-            if root and hum and hum.Health > 0 then
-                local distance = (root.Position - lroot.Position).Magnitude
-                if distance < dist then
-                    closest = player.Character
-                    dist = distance
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local function ExecuteKillaura()
-    local weapon = GetWeapon()
-    local target = GetNearestEnemy(15)
-    if not weapon or not target then return end
-
-    -- Equip weapon if needed
-    if weapon.Parent ~= LocalPlayer.Character then
-        LocalPlayer.Character.Humanoid:EquipTool(weapon)
-        task.wait(0.1)
-    end
-
-    -- Teleport close to target
-    local targetPos = target:GetPrimaryPartCFrame()
-    LocalPlayer.Character:PivotTo(targetPos * CFrame.new(0, 0, -2))
-
-    -- Fire attack remote
-    local args = {"UsingMoveCustom", weapon, nil, {Clicked = true}}
-    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
-    
-    -- Fire confirmation remote
-    local args2 = {"UsingMoveCustom", weapon, true, {Clicked = true}}
-    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args2))
-end
-
-Combat:Toggle({
-    Title = "Kill Aura",
-    Desc = "Automatically attacks nearby enemies (supports Bottle,Fork,Knife,Power Hold)",
-    Value = false,
+CombatMainGroup:AddToggle("KillAuraToggle", {
+    Text = "Kill Aura",
+    Tooltip = "Automatically attacks nearby enemies (supports Bottle,Fork,Knife,Power Hold)",
+    Default = false,
     Callback = function(state)
         killAuraEnabled = state
         if state then
@@ -1879,11 +1036,9 @@ Combat:Toggle({
     end
 })
 
--- Add this to the Combat tab section
-Combat:Section({Title = "Hitbox Expander"})
-Combat:Divider()
+-- Hitbox Expander
+local HitboxGroup = CombatTab:AddRightGroupbox("Hitbox Expander")
 
--- Hitbox variables
 local hitboxEnabled = false
 local hitboxSize = 5 -- Default size multiplier
 local hitboxTransparency = 0.7
@@ -1891,130 +1046,22 @@ local hitboxColor = Color3.fromRGB(255, 0, 0)
 local hitboxConnections = {}
 local hitboxParts = {}
 
--- Function to create/update hitbox for a guard
-local function updateHitbox(guard)
-    if not guard:IsA("Model") then return end
-    local hrp = guard:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    -- Clear existing hitbox if any
-    if hitboxParts[guard] then
-        hitboxParts[guard]:Destroy()
-        hitboxParts[guard] = nil
-    end
-    
-    if not hitboxEnabled then return end
-    
-    -- Create a new invisible part that will act as the hitbox
-    local hitbox = Instance.new("Part")
-    hitbox.Name = "ExpandedHitbox"
-    hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-    hitbox.Transparency = hitboxTransparency
-    hitbox.Color = hitboxColor
-    hitbox.Material = Enum.Material.ForceField
-    hitbox.Anchored = false
-    hitbox.CanCollide = false
-    hitbox.CFrame = hrp.CFrame
-    
-    -- Weld to the guard's HRP
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = hrp
-    weld.Part1 = hitbox
-    weld.Parent = hitbox
-    
-    hitbox.Parent = guard
-    hitboxParts[guard] = hitbox
-    
-    -- Make the original HRP invisible and non-collidable
-    hrp.Transparency = 1
-    hrp.CanCollide = false
-    
-    -- Cleanup when guard is removed
-    hitboxConnections[guard] = guard.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            if hitboxParts[guard] then
-                hitboxParts[guard]:Destroy()
-                hitboxParts[guard] = nil
-            end
-            if hitboxConnections[guard] then
-                hitboxConnections[guard]:Disconnect()
-                hitboxConnections[guard] = nil
-            end
-            -- Restore original HRP properties if guard still exists
-            if guard.Parent then
-                if hrp then
-                    hrp.Transparency = 0
-                    hrp.CanCollide = true
-                end
-            end
-        end
-    end)
-end
-
--- Function to setup hitboxes for all guards
-local function setupHitboxes()
-    -- Clear existing hitboxes
-    for guard, hitbox in pairs(hitboxParts) do
-        if hitbox and hitbox.Parent then
-            hitbox:Destroy()
-        end
-        -- Restore original HRP properties
-        if guard and guard.Parent then
-            local hrp = guard:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.Transparency = 0
-                hrp.CanCollide = true
-            end
-        end
-    end
-    table.clear(hitboxParts)
-    
-    for guard, conn in pairs(hitboxConnections) do
-        if conn then
-            conn:Disconnect()
-        end
-    end
-    table.clear(hitboxConnections)
-
-    if not hitboxEnabled then return end
-    
-    -- Find all existing guards
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
-           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
-            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
-            updateHitbox(obj)
-        end
-    end
-    
-    -- Listen for new guards
-    hitboxConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
-           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
-            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
-            updateHitbox(obj)
-        end
-    end)
-end
-
--- Main toggle for hitboxes
-Combat:Toggle({
-    Title = "Guard Hitbox Expander",
-    Desc = "Makes guards easier to hit by expanding their hitbox",
-    Value = false,
+HitboxGroup:AddToggle("HitboxToggle", {
+    Text = "Guard Hitbox Expander",
+    Tooltip = "Makes guards easier to hit by expanding their hitbox",
+    Default = false,
     Callback = function(state)
         hitboxEnabled = state
         setupHitboxes()
     end
 })
 
-Combat:Slider({
-    Title = "Guard Hitbox Size",
-    Value = {
-        Min = 1,
-        Max = 20,
-        Default = 5,
-    },
+HitboxGroup:AddSlider("HitboxSizeSlider", {
+    Text = "Guard Hitbox Size",
+    Default = 5,
+    Min = 1,
+    Max = 20,
+    Rounding = 1,
     Callback = function(value)
         hitboxSize = value
         if hitboxEnabled then
@@ -2027,13 +1074,12 @@ Combat:Slider({
     end
 })
 
-Combat:Slider({
-    Title = "Guard Hitbox Transparency",
-    Value = {
-        Min = 0,
-        Max = 1,
-        Default = 0.7,
-    },
+HitboxGroup:AddSlider("HitboxTransparencySlider", {
+    Text = "Guard Hitbox Transparency",
+    Default = 0.7,
+    Min = 0,
+    Max = 1,
+    Rounding = 2,
     Callback = function(value)
         hitboxTransparency = value
         if hitboxEnabled then
@@ -2047,9 +1093,9 @@ Combat:Slider({
 })
 
 -- Color picker
-Combat:Colorpicker({
-    Title = "Guard Hitbox Color",
-    Default = Color3.fromRGB(255, 0, 0), -- Red
+HitboxGroup:AddLabel("Guard Hitbox Color"):AddColorPicker("HitboxColorPicker", {
+    Default = Color3.fromRGB(255, 0, 0),
+    Title = "Hitbox Color",
     Callback = function(color)
         hitboxColor = color
         if hitboxEnabled then
@@ -2063,193 +1109,37 @@ Combat:Colorpicker({
     end
 })
 
--- Auto-update when character respawns
-game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
-    if hitboxEnabled then
-        task.wait(1) -- Wait for character to load
-        setupHitboxes()
-    end
-end)
-
 -- Utility Tab
-Utility:Section({Title = "Power"})
-Utility:Divider()
--- Phantom Step Button
-Utility:Button({
-    Title = "Change to Phantom Step",
-    Desc = "Equips the Phantom Step power",
-    Callback = function()
+local PowerGroup = UtilityTab:AddLeftGroupbox("Power")
+PowerGroup:AddButton({
+    Text = "Change to Phantom Step",
+    Func = function()
         pcall(function()
             local player = game:GetService("Players").LocalPlayer
             player:SetAttribute("_EquippedPower", "PHANTOM STEP")
+            Library:Notify("Phantom Step equipped", 3)
         end)
     end
 })
 
-Utility:Section({Title = "Utilities"})
-Utility:Divider()
--- Invisibility Toggle
-local invisibilityEnabled = false
-local invisibilityCleanup
+local UtilitiesGroup = UtilityTab:AddRightGroupbox("Utilities")
 
-Utility:Toggle({
-    Title = "Invisibility",
-    Desc = "Makes your character transparent and float",
-    Value = false,
-    Callback = function(state)
-        invisibilityEnabled = state
-        if state then
-            local char = LocalPlayer.Character
-            if not char then return end
-
-            -- Store original properties
-            local original = {
-                transparency = {},
-                material = {},
-                decals = {}
-            }
-
-            -- Make character transparent
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    original.transparency[part] = part.Transparency
-                    original.material[part] = part.Material
-                    part.Transparency = 0.7
-                    part.Material = Enum.Material.Glass
-                elseif part:IsA("Decal") then
-                    original.decals[part] = part.Transparency
-                    part.Transparency = 1
-                end
-            end
-
-            -- Floating animation
-            local floatHeight = 2
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if humanoid then
-                humanoid.PlatformStand = true
-            end
-
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                local bodyVelocity = Instance.new("BodyVelocity")
-                bodyVelocity.Velocity = Vector3.new(0, floatHeight, 0)
-                bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0)
-                bodyVelocity.Parent = root
-
-                -- Store cleanup function
-                invisibilityCleanup = function()
-                    for part, transparency in pairs(original.transparency) do
-                        part.Transparency = transparency
-                    end
-                    for part, material in pairs(original.material) do
-                        part.Material = material
-                    end
-                    for decal, transparency in pairs(original.decals) do
-                        decal.Transparency = transparency
-                    end
-                    if humanoid then
-                        humanoid.PlatformStand = false
-                    end
-                    if bodyVelocity then
-                        bodyVelocity:Destroy()
-                    end
-                end
-            end
-        elseif invisibilityCleanup then
-            invisibilityCleanup()
-            invisibilityCleanup = nil
-        end
-    end
-})
-
--- Lightning God Toggle
-local lightningGodEnabled = false
-local lightningGodCleanup
-
-Utility:Toggle({
-    Title = "Lightning God Awakening (Visual)",
-    Desc = "Gives you lightning particle effects and damage boost",
-    Value = false,
-    Callback = function(state)
-        lightningGodEnabled = state
-        if state then
-            local char = LocalPlayer.Character
-            if not char then return end
-
-            -- Create effect folder
-            local effectsFolder = Instance.new("Folder")
-            effectsFolder.Name = "LightningGodEffects"
-            effectsFolder.Parent = char
-
-            -- Create lightning particles
-            local attachment = Instance.new("Attachment")
-            attachment.Parent = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head") or char.PrimaryPart
-
-            local lightning = Instance.new("ParticleEmitter")
-            lightning.LightEmission = 1
-            lightning.Texture = "rbxassetid://243098098"
-            lightning.LightInfluence = 0
-            lightning.Color = ColorSequence.new(Color3.fromRGB(0, 162, 255))
-            lightning.Size = NumberSequence.new(1)
-            lightning.Lifetime = NumberRange.new(0.5)
-            lightning.Rate = 50
-            lightning.Rotation = NumberRange.new(0, 360)
-            lightning.Speed = NumberRange.new(5)
-            lightning.SpreadAngle = Vector2.new(360, 360)
-            lightning.Shape = Enum.ParticleEmitterShape.Sphere
-            lightning.Parent = attachment
-
-            -- Damage boost function
-            local function onHit(hit, humanoid)
-                if humanoid and humanoid.Parent ~= char then
-                    humanoid:TakeDamage(25) -- Increased damage
-                end
-            end
-
-            -- Connect to character's touched events
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.Touched:Connect(function(hit)
-                        local humanoid = hit.Parent:FindFirstChildOfClass("Humanoid")
-                        if humanoid then
-                            onHit(hit, humanoid)
-                        end
-                    end)
-                end
-            end
-
-            -- Store cleanup function
-            lightningGodCleanup = function()
-                if effectsFolder then
-                    effectsFolder:Destroy()
-                end
-                if attachment then
-                    attachment:Destroy()
-                end
-            end
-        elseif lightningGodCleanup then
-            lightningGodCleanup()
-            lightningGodCleanup = nil
-        end
-    end
-})
-
-Utility:Input({
-    Title = "Change Number Tag",
-    Desc = "Enter desired tag number (1-456)",
+-- Change Number Tag
+local DESIRED_TAG = 123
+UtilitiesGroup:AddInput("TagInput", {
+    Text = "Change Number Tag",
+    Tooltip = "Enter desired tag number (1-456)",
     Default = "123",
     Numeric = true,
     Finished = false,
     Callback = function(value)
-        getgenv().DESIRED_TAG = tonumber(value) or 123
+        DESIRED_TAG = tonumber(value) or 123
     end
 })
 
-Utility:Button({
-    Title = "Apply Number Tag",
-    Desc = "Click to apply the entered tag number",
-    Callback = function()
-        local DESIRED_TAG = getgenv().DESIRED_TAG or 123
+UtilitiesGroup:AddButton({
+    Text = "Apply Number Tag",
+    Func = function()
         if game.PlaceId == 125009265613167 then return end
 
         -- SERVICES
@@ -2302,17 +1192,18 @@ Utility:Button({
 
         -- Initial immediate attempt
         attemptTagChange()
+        Library:Notify("Attempting to set tag to "..DESIRED_TAG, 3)
     end
 })
 
-Utility:Toggle({
-    Title = "Auto Skip Cutscenes",
-    Desc = "Automatically skips all cutscenes and dialogue",
-    Value = false,
+-- Auto Skip Cutscenes
+UtilitiesGroup:AddToggle("SkipCutscenesToggle", {
+    Text = "Auto Skip Cutscenes",
+    Tooltip = "Automatically skips all cutscenes and dialogue",
+    Default = false,
     Callback = function(state)
         if state then
             getgenv().skipCutsceneConnection = RunService.Heartbeat:Connect(function()
-                
                 local args = {"Skipped"}
                 pcall(function()
                     game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("DialogueRemote"):FireServer(unpack(args))
@@ -2327,23 +1218,352 @@ Utility:Toggle({
     end
 })
 
-local function onCharacterAdded(character)
-    if getgenv().currentWalkSpeed then
-        task.wait(1)
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
+-- Misc Tab
+local SafeGroup = MiscTab:AddLeftGroupbox("Safe")
+
+local lastPosition = nil
+local safeZoneFolder = nil
+SafeGroup:AddButton({
+    Text = "Teleport to SafeZone",
+    Func = function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            lastPosition = character.HumanoidRootPart.CFrame
+            local safeZonePos = createSafeZone()
+            character.HumanoidRootPart.CFrame = CFrame.new(safeZonePos)
+            Library:Notify("Teleported to SafeZone", 3)
+        end
+    end
+})
+
+SafeGroup:AddButton({
+    Text = "Teleport Back",
+    Func = function()
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") and lastPosition then
+            character.HumanoidRootPart.CFrame = lastPosition
+            if safeZoneFolder then
+                safeZoneFolder:Destroy()
+                safeZoneFolder = nil
+            end
+            Library:Notify("Teleported back", 3)
+        end
+    end
+})
+
+-- Character Modifications
+local CharModGroup = MiscTab:AddRightGroupbox("Character Modifications")
+
+-- Disable Injuries
+local disableInjuriesEnabled = false
+local injuriesConnection
+CharModGroup:AddToggle("DisableInjuriesToggle", {
+    Text = "Disable Injuries",
+    Tooltip = "Removes injured walking",
+    Default = false,
+    Callback = function(state)
+        disableInjuriesEnabled = state
+        if state then
+            injuriesConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Add small delay between checks
+                    task.wait(0.3)
+                    
+                    local player = Players.LocalPlayer
+                    local character = workspace.Live:FindFirstChild(player.Name)
+                    if character then
+                        local injuredWalking = character:FindFirstChild("InjuredWalking")
+                        if injuredWalking then
+                            injuredWalking:Destroy()
+                        end
+                    end
+                end)
+            end)
+        else
+            if injuriesConnection then
+                injuriesConnection:Disconnect()
+                injuriesConnection = nil
+            end
+        end
+    end
+})
+
+-- Disable Stun/Slow
+local disableStunEnabled = false
+local stunConnection
+CharModGroup:AddToggle("DisableStunToggle", {
+    Text = "Disable Stun/Slow",
+    Tooltip = "Removes stun and slow effects",
+    Default = false,
+    Callback = function(state)
+        disableStunEnabled = state
+        if state then
+            stunConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Add small delay between checks
+                    task.wait(0.3)
+                    
+                    local player = Players.LocalPlayer
+                    local character = workspace.Live:FindFirstChild(player.Name)
+                    if character then
+                        for _, descendant in pairs(character:GetDescendants()) do
+                            if string.find(string.lower(descendant.Name), "stun") then
+                                descendant:Destroy()
+                            end
+                        end
+                    end
+                end)
+            end)
+            
+            -- Also check when character is added
+            Players.LocalPlayer.CharacterAdded:Connect(function(character)
+                if disableStunEnabled then
+                    task.wait(1) -- Wait for character to fully load
+                    for _, descendant in pairs(character:GetDescendants()) do
+                        if string.find(string.lower(descendant.Name), "stun") then
+                            descendant:Destroy()
+                        end
+                    end
+                end
+            end)
+        else
+            if stunConnection then
+                stunConnection:Disconnect()
+                stunConnection = nil
+            end
+        end
+    end
+})
+
+-- Walk Speed
+local currentWalkSpeed = 16
+CharModGroup:AddSlider("WalkSpeedSlider", {
+    Text = "Walk Speed",
+    Default = 16,
+    Min = 16,
+    Max = 100,
+    Rounding = 1,
+    Callback = function(value)
+        currentWalkSpeed = value
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            humanoid.WalkSpeed = getgenv().currentWalkSpeed
+            humanoid.WalkSpeed = value
+        end
+    end
+})
+
+-- Jump Power
+CharModGroup:AddSlider("JumpPowerSlider", {
+    Text = "Jump Power",
+    Default = 50,
+    Min = 50,
+    Max = 200,
+    Rounding = 1,
+    Callback = function(value)
+        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.JumpPower = value
+        end
+    end
+})
+
+-- Anti AFK
+local antiAFKEnabled = false
+local antiAFKConnection
+CharModGroup:AddToggle("AntiAFKToggle", {
+    Text = "Anti AFK",
+    Tooltip = "Prevents you from being kicked for inactivity",
+    Default = false,
+    Callback = function(state)
+        antiAFKEnabled = state
+        if state then
+            -- Simulate activity by moving the mouse slightly
+            antiAFKConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    -- Move mouse slightly every 30 seconds to prevent AFK
+                    if tick() % 30 < 0.1 then
+                        local VirtualInputManager = game:GetService("VirtualInputManager")
+                        VirtualInputManager:SendMouseMoveEvent(1, 1, game:GetService("Players").LocalPlayer.PlayerGui)
+                    end
+                    
+                    -- Alternative method using VirtualUser
+                    local VirtualUser = game:GetService("VirtualUser")
+                    VirtualUser:CaptureController()
+                    VirtualUser:SetKeyDown("0x01") -- Left mouse button
+                    VirtualUser:SetKeyUp("0x01")
+                end)
+            end)
+            
+            -- Also connect to the game's idle event
+            Players.LocalPlayer.Idled:Connect(function()
+                if antiAFKEnabled then
+                    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                    task.wait(1)
+                    game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                end
+            end)
+        else
+            if antiAFKConnection then
+                antiAFKConnection:Disconnect()
+                antiAFKConnection = nil
+            end
+        end
+    end
+})
+
+-- NoClip
+local noclipEnabled = false
+local noclipConnection
+CharModGroup:AddToggle("NoClipToggle", {
+    Text = "NoClip",
+    Tooltip = "Walk through walls and objects",
+    Default = false,
+    Callback = function(state)
+        noclipEnabled = state
+        if state then
+            -- Enable NoClip
+            noclipConnection = RunService.Stepped:Connect(noclipLoop)
+            
+            -- Handle character respawns
+            LocalPlayer.CharacterAdded:Connect(function(char)
+                task.wait(0.5) -- Wait for character to fully load
+                if noclipEnabled then
+                    noclipLoop()
+                end
+            end)
+        else
+            -- Disable NoClip
+            if noclipConnection then
+                noclipConnection:Disconnect()
+                noclipConnection = nil
+            end
+            
+            -- Restore collision if character exists
+            if LocalPlayer.Character then
+                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = true
+                    end
+                end
+            end
+        end
+    end
+})
+
+-- Visual Tab
+local ESPGroup = VisualTab:AddLeftGroupbox("ESP")
+
+-- ESP Players
+local playerESPEnabled = false
+ESPGroup:AddToggle("PlayerESPToggle", {
+    Text = "ESP Players",
+    Tooltip = "Highlights all players with health display",
+    Default = false,
+    Callback = function(state)
+        playerESPEnabled = state
+        SetupPlayerESP()
+    end
+})
+
+-- ESP Guards
+local guardESPEnabled = false
+ESPGroup:AddToggle("GuardESPToggle", {
+    Text = "ESP Guards",
+    Tooltip = "Highlights all guards in the game",
+    Default = false,
+    Callback = function(state)
+        guardESPEnabled = state
+        SetupGuardESP()
+    end
+})
+
+-- UI Settings
+local MenuGroup = Window.Tabs["UI Settings"]:AddLeftGroupbox("Menu")
+
+MenuGroup:AddToggle("KeybindMenuToggle", {
+    Text = "Open Keybind Menu",
+    Default = false,
+    Callback = function(value)
+        Library.KeybindFrame.Visible = value
+    end,
+})
+
+MenuGroup:AddToggle("CustomCursorToggle", {
+    Text = "Custom Cursor",
+    Default = true,
+    Callback = function(Value)
+        Library.ShowCustomCursor = Value
+    end,
+})
+
+MenuGroup:AddDropdown("NotificationSideDropdown", {
+    Values = { "Left", "Right" },
+    Default = "Right",
+    Text = "Notification Side",
+    Callback = function(Value)
+        Library:SetNotifySide(Value)
+    end,
+})
+
+MenuGroup:AddDropdown("DPIDropdown", {
+    Values = { "50%", "75%", "100%", "125%", "150%", "175%", "200%" },
+    Default = "100%",
+    Text = "DPI Scale",
+    Callback = function(Value)
+        Value = Value:gsub("%%", "")
+        local DPI = tonumber(Value)
+        Library:SetDPIScale(DPI / 100)
+    end,
+})
+
+MenuGroup:AddDivider()
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { 
+    Default = "RightShift", 
+    NoUI = true, 
+    Text = "Menu keybind" 
+})
+
+MenuGroup:AddButton("Unload", function()
+    Library:Unload()
+end)
+
+-- Set the keybind to toggle the menu
+Library.ToggleKeybind = Options.MenuKeybind
+
+-- Hand the library over to our managers
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+
+-- Ignore keys that are used by ThemeManager.
+SaveManager:IgnoreThemeSettings()
+
+-- Adds our MenuKeybind to the ignore list
+SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+
+-- Set the folders
+ThemeManager:SetFolder("InkGameAgsy")
+SaveManager:SetFolder("InkGameAgsy/settings")
+
+-- Build our config menu on the right side of our tab
+SaveManager:BuildConfigSection(Window.Tabs["UI Settings"])
+
+-- Build our theme menu
+ThemeManager:ApplyToTab(Window.Tabs["UI Settings"])
+
+-- Load the config
+SaveManager:LoadAutoloadConfig()
+
+-- Helper functions (place these at the bottom of your script)
+
+local function noclipLoop()
+    if noclipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
         end
     end
 end
-
-game:GetService("Players").LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
-
--- Misc
-Misc:Section({Title = "Safe"})
-Misc:Divider()
-local lastPosition = nil
-local safeZoneFolder = nil
 
 local function createSafeZone()
     -- Delete existing safezone if it exists
@@ -2512,255 +1732,548 @@ local function createSafeZone()
     return platform.Position + Vector3.new(20, 7, 0)
 end
 
-Misc:Button({
-    Title = "Teleport to SafeZone",
-    Desc = "Teleports you to a safezone",
-    Callback = function()
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            lastPosition = character.HumanoidRootPart.CFrame
-            local safeZonePos = createSafeZone()
-            character.HumanoidRootPart.CFrame = CFrame.new(safeZonePos)
+local function HiderESP(player)
+    if player:GetAttribute("IsHider") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        -- Clear existing highlight if any
+        if hiderHighlights[player] then
+            hiderHighlights[player]:Destroy()
+            hiderHighlights[player] = nil
+        end
+
+        if not hiderESPEnabled then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = player.Character
+        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green for hiders
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = player.Character
+        hiderHighlights[player] = highlight
+
+        -- Cleanup when player is no longer a hider
+        player:GetAttributeChangedSignal("IsHider"):Connect(function()
+            if hiderHighlights[player] then 
+                hiderHighlights[player]:Destroy()
+                hiderHighlights[player] = nil
+            end
+        end)
+    end
+end
+
+local function HunterESP(player)
+    if player:GetAttribute("IsHunter") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        -- Clear existing highlight if any
+        if hunterHighlights[player] then
+            hunterHighlights[player]:Destroy()
+            hunterHighlights[player] = nil
+        end
+
+        if not hunterESPEnabled then return end
+
+        local highlight = Instance.new("Highlight")
+        highlight.Adornee = player.Character
+        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red for hunters
+        highlight.OutlineColor = Color3.new(1, 1, 1)
+        highlight.FillTransparency = 0.5
+        highlight.Parent = player.Character
+        hunterHighlights[player] = highlight
+
+        -- Cleanup when player is no longer a hunter
+        player:GetAttributeChangedSignal("IsHunter"):Connect(function()
+            if hunterHighlights[player] then 
+                hunterHighlights[player]:Destroy()
+                hunterHighlights[player] = nil
+            end
+        end)
+    end
+end
+
+local function KeyESP(keyModel)
+    if not keyModel or not keyModel:IsA("Model") or not keyModel.PrimaryPart then
+        return
+    end
+
+    -- Create Highlight for the key
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "KeyESP"
+    highlight.Adornee = keyModel
+    highlight.FillColor = Color3.fromRGB(255, 255, 0)  -- Yellow color for keys
+    highlight.OutlineColor = Color3.fromRGB(255, 215, 0) -- Gold outline
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.Parent = keyModel
+    keyHighlights[keyModel] = highlight
+
+    -- Clean up if the key is destroyed or removed
+    local connection
+    connection = keyModel.AncestryChanged:Connect(function(_, parent)
+        if not parent or not keyModel:IsDescendantOf(game) then
+            if highlight and highlight.Parent then
+                highlight:Destroy()
+            end
+            if connection then
+                connection:Disconnect()
+            end
+            keyHighlights[keyModel] = nil
+        end
+    end)
+
+    keyESPConnections[keyModel] = connection
+end
+
+local function SetupKeyESP()
+    -- Clear existing highlights and connections
+    for key, highlight in pairs(keyHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
         end
     end
-})
+    table.clear(keyHighlights)
+    
+    for key, conn in pairs(keyESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(keyESPConnections)
 
-Misc:Button({
-    Title = "Teleport Back",
-    Desc = "Returns you to where you were",
-    Callback = function()
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") and lastPosition then
-            character.HumanoidRootPart.CFrame = lastPosition
-            if safeZoneFolder then
-                safeZoneFolder:Destroy()
-                safeZoneFolder = nil
+    if not keyESPEnabled then return end
+
+    -- Scan existing keys in workspace
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
+        end
+    end
+
+    -- Listen for new keys
+    keyESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name:lower():find("key") and obj:IsA("Model") then
+            KeyESP(obj)
+        end
+    end)
+end
+
+local function EscapeDoorESP(door)
+    -- Validate the door object
+    if not door or not door:IsA("Model") then return end
+    if not door.PrimaryPart then return end
+    
+    -- Check if this door already has ESP
+    if escapeDoorHighlights[door] then return end
+
+    -- Create visual elements
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(0, 255, 0)  -- Green for escape
+    highlight.OutlineColor = Color3.fromRGB(0, 200, 0)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Parent = door
+    escapeDoorHighlights[door] = highlight
+
+    -- Add a floating text label
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "ESCAPE DOOR"
+    label.TextColor3 = Color3.fromRGB(0, 255, 0)
+    label.TextSize = 14
+    label.Font = Enum.Font.Oswald
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Parent = billboard
+    billboard.Parent = door
+    escapeDoorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        escapeDoorHighlights[door] = nil
+        escapeDoorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    escapeDoorConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then cleanup() end
+    end)
+end
+
+local function SetupEscapeDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(escapeDoorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(escapeDoorHighlights)
+    
+    for door, billboard in pairs(escapeDoorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(escapeDoorBillboards)
+    
+    for door, conn in pairs(escapeDoorConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(escapeDoorConnections)
+
+    if not escapeDoorESPEnabled then return end
+
+    -- Check existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end
+
+    -- Monitor for new doors
+    escapeDoorConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj.Name == "EXITDOOR" then
+            EscapeDoorESP(obj)
+        end
+    end)
+end
+
+local function DoorESP(door)
+    if not door:IsA("Model") or not door.PrimaryPart then return end
+    
+    -- Only target door models (adjust names as needed)
+    if not (door.Name:find("Door") or door.Name:find("door")) then return end
+
+    -- Clear existing ESP if any
+    if doorHighlights[door] then
+        doorHighlights[door]:Destroy()
+        doorHighlights[door] = nil
+    end
+    if doorBillboards[door] then
+        doorBillboards[door]:Destroy()
+        doorBillboards[door] = nil
+    end
+
+    if not doorESPEnabled then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "DoorESP"
+    highlight.Adornee = door
+    highlight.FillColor = Color3.fromRGB(255, 165, 0)  -- Orange
+    highlight.OutlineColor = Color3.fromRGB(255, 100, 0)
+    highlight.FillTransparency = 0.6
+    highlight.Parent = door
+    doorHighlights[door] = highlight
+
+    -- Show required key if available
+    local keyNeeded = door:GetAttribute("KeyNeeded") or "Unknown"
+    local billboard = Instance.new("BillboardGui")
+    billboard.Adornee = door.PrimaryPart
+    billboard.Size = UDim2.new(0, 150, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+
+    local label = Instance.new("TextLabel")
+    label.Text = "DOOR (Key: "..keyNeeded..")"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Parent = billboard
+    billboard.Parent = door
+    doorBillboards[door] = billboard
+
+    -- Cleanup function
+    local function cleanup()
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+        doorHighlights[door] = nil
+        doorBillboards[door] = nil
+    end
+
+    -- Auto-cleanup when door is removed
+    doorESPConnections[door] = door.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            cleanup()
+            if doorESPConnections[door] then
+                doorESPConnections[door]:Disconnect()
+                doorESPConnections[door] = nil
             end
         end
-    end
-})
+    end)
+end
 
-Misc:Section({Title = "Character Modifications"})
-Misc:Divider()
-
--- Disable Injuries Toggle
-local disableInjuriesEnabled = false
-local injuriesConnection
-
-Misc:Toggle({
-    Title = "Disable Injuries",
-    Desc = "Removes injured walking",
-    Value = false,
-    Callback = function(state)
-        disableInjuriesEnabled = state
-        if state then
-            injuriesConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    -- Add small delay between checks
-                    task.wait(0.3)
-                    
-                    local player = Players.LocalPlayer
-                    local character = workspace.Live:FindFirstChild(player.Name)
-                    if character then
-                        local injuredWalking = character:FindFirstChild("InjuredWalking")
-                        if injuredWalking then
-                            injuredWalking:Destroy()
-                        end
-                    end
-                end)
-            end)
-        else
-            if injuriesConnection then
-                injuriesConnection:Disconnect()
-                injuriesConnection = nil
-            end
+local function SetupDoorESP()
+    -- Clear existing ESP
+    for door, highlight in pairs(doorHighlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
         end
     end
-})
+    table.clear(doorHighlights)
+    
+    for door, billboard in pairs(doorBillboards) do
+        if billboard and billboard.Parent then
+            billboard:Destroy()
+        end
+    end
+    table.clear(doorBillboards)
+    
+    for door, conn in pairs(doorESPConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(doorESPConnections)
 
--- Disable Stun/Slow Toggle
-local disableStunEnabled = false
-local stunConnection
+    if not doorESPEnabled then return end
 
-Misc:Toggle({
-    Title = "Disable Stun/Slow",
-    Desc = "Removes stun and slow effects",
-    Value = false,
-    Callback = function(state)
-        disableStunEnabled = state
-        if state then
-            stunConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    -- Add small delay between checks
-                    task.wait(0.3)
-                    
-                    local player = Players.LocalPlayer
-                    local character = workspace.Live:FindFirstChild(player.Name)
-                    if character then
-                        for _, descendant in pairs(character:GetDescendants()) do
-                            if string.find(string.lower(descendant.Name), "stun") then
-                                descendant:Destroy()
-                            end
-                        end
-                    end
-                end)
-            end)
+    -- Find existing doors
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end
+
+    -- Detect new doors
+    doorESPConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") then
+            DoorESP(obj)
+        end
+    end)
+end
+
+local function KillHiders()
+    while killHidersEnabled do
+        task.wait(0.25) -- Slight delay between checks
+        
+        local hider = nil
+        -- Find nearest alive hider using IsHider attribute
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player:GetAttribute("IsHider") and 
+               player.Character and player.Character:FindFirstChild("Humanoid") and 
+               player.Character.Humanoid.Health > 0 then
+                hider = player
+                break
+            end
+        end
+
+        if hider and hider.Character and hider.Character:FindFirstChild("HumanoidRootPart") then
+            -- Teleport to hider
+            LocalPlayer.Character:PivotTo(hider.Character:GetPrimaryPartCFrame())
+            task.wait(0.2)
             
-            -- Also check when character is added
-            Players.LocalPlayer.CharacterAdded:Connect(function(character)
-                if disableStunEnabled then
-                    task.wait(1) -- Wait for character to fully load
-                    for _, descendant in pairs(character:GetDescendants()) do
-                        if string.find(string.lower(descendant.Name), "stun") then
-                            descendant:Destroy()
-                        end
-                    end
-                end
-            end)
-        else
-            if stunConnection then
-                stunConnection:Disconnect()
-                stunConnection = nil
-            end
-        end
-    end
-})
-
-Misc:Slider({
-    Title = "Walk Speed",
-    Value = {
-        Min = 16,
-        Max = 100,
-        Default = 16,
-    },
-    Callback = function(value)
-        getgenv().currentWalkSpeed = value
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = value
-        end
-    end
-})
-
-Misc:Slider({
-    Title = "Jump Power",
-    Value = {
-        Min = 50,
-        Max = 200,
-        Default = 50,
-    },
-    Callback = function(value)
-        local humanoid = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.JumpPower = value
-        end
-    end
-})
-
--- Anti AFK Toggle
-local antiAFKEnabled = false
-local antiAFKConnection
-
-Misc:Toggle({
-    Title = "Anti AFK",
-    Desc = "Prevents you from being kicked for inactivity",
-    Value = false,
-    Callback = function(state)
-        antiAFKEnabled = state
-        if state then
-            -- Simulate activity by moving the mouse slightly
-            antiAFKConnection = RunService.Heartbeat:Connect(function()
-                pcall(function()
-                    -- Move mouse slightly every 30 seconds to prevent AFK
-                    if tick() % 30 < 0.1 then
-                        local VirtualInputManager = game:GetService("VirtualInputManager")
-                        VirtualInputManager:SendMouseMoveEvent(1, 1, game:GetService("Players").LocalPlayer.PlayerGui)
-                    end
-                    
-                    -- Alternative method using VirtualUser
-                    local VirtualUser = game:GetService("VirtualUser")
-                    VirtualUser:CaptureController()
-                    VirtualUser:SetKeyDown("0x01") -- Left mouse button
-                    VirtualUser:SetKeyUp("0x01")
-                end)
-            end)
-            
-            -- Also connect to the game's idle event
-            Players.LocalPlayer.Idled:Connect(function()
-                if antiAFKEnabled then
-                    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                    task.wait(1)
-                    game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-                end
-            end)
-        else
-            if antiAFKConnection then
-                antiAFKConnection:Disconnect()
-                antiAFKConnection = nil
-            end
-        end
-    end
-})
-
--- NoClip Toggle
-local noclipEnabled = false
-local noclipConnection
-
-local function noclipLoop()
-    if noclipEnabled and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
+            -- Fire knife remote to kill
+            local knife = LocalPlayer.Character:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
+            if knife then
+                LocalPlayer.Character.Humanoid:EquipTool(knife)
+                local args = { "UsingMoveCustom", knife, nil, { Clicked = true } }
+                game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
             end
         end
     end
 end
 
-Misc:Toggle({
-    Title = "NoClip",
-    Desc = "Walk through walls and objects",
-    Value = false,
-    Callback = function(state)
-        noclipEnabled = state
-        if state then
-            -- Enable NoClip
-            noclipConnection = RunService.Stepped:Connect(noclipLoop)
-            
-            -- Handle character respawns
-            LocalPlayer.CharacterAdded:Connect(function(char)
-                task.wait(0.5) -- Wait for character to fully load
-                if noclipEnabled then
-                    noclipLoop()
-                end
-            end)
-        else
-            -- Disable NoClip
-            if noclipConnection then
-                noclipConnection:Disconnect()
-                noclipConnection = nil
-            end
-            
-            -- Restore collision if character exists
-            if LocalPlayer.Character then
-                for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = true
-                    end
+local function GetNearestGuard()
+    local closest, dist = nil, math.huge
+    local lroot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not lroot then return end
+
+    for _, model in pairs(workspace.Live:GetChildren()) do
+        if IsGuard(model) then
+            local guardRoot = model:FindFirstChild("HumanoidRootPart")
+            if guardRoot then
+                local distance = (guardRoot.Position - lroot.Position).Magnitude
+                if distance < dist then
+                    closest = guardRoot
+                    dist = distance
                 end
             end
         end
     end
-})
+    return closest
+end
 
--- Visual Tab
-Visual:Section({Title = "ESP"})
-Visual:Divider()
+local function IsGuard(model)
+    return model:IsA("Model") and 
+           model:FindFirstChild("TypeOfGuard") and 
+           (model.Name:find("Rebel") or model.Name:find("Guard")) and
+           model:FindFirstChild("Humanoid") and 
+           model.Humanoid.Health > 0
+end
 
--- ESP Players
-local playerESPEnabled = false
-local playerESPConnections = {}
-local playerHighlights = {}
-local playerBillboards = {}
+local function GetWeapon()
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    for _, weaponName in pairs(validWeapons) do
+        local weapon = char:FindFirstChild(weaponName) or LocalPlayer.Backpack:FindFirstChild(weaponName)
+        if weapon then return weapon end
+    end
+end
+
+local function GetNearestEnemy(maxDist)
+    local closest, dist = nil, maxDist or 15
+    local lroot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not lroot then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChild("Humanoid")
+            if root and hum and hum.Health > 0 then
+                local distance = (root.Position - lroot.Position).Magnitude
+                if distance < dist then
+                    closest = player.Character
+                    dist = distance
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function ExecuteKillaura()
+    local weapon = GetWeapon()
+    local target = GetNearestEnemy(15)
+    if not weapon or not target then return end
+
+    -- Equip weapon if needed
+    if weapon.Parent ~= LocalPlayer.Character then
+        LocalPlayer.Character.Humanoid:EquipTool(weapon)
+        task.wait(0.1)
+    end
+
+    -- Teleport close to target
+    local targetPos = target:GetPrimaryPartCFrame()
+    LocalPlayer.Character:PivotTo(targetPos * CFrame.new(0, 0, -2))
+
+    -- Fire attack remote
+    local args = {"UsingMoveCustom", weapon, nil, {Clicked = true}}
+    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args))
+    
+    -- Fire confirmation remote
+    local args2 = {"UsingMoveCustom", weapon, true, {Clicked = true}}
+    game:GetService("ReplicatedStorage").Remotes.UsedTool:FireServer(unpack(args2))
+end
+
+local function updateHitbox(guard)
+    if not guard:IsA("Model") then return end
+    local hrp = guard:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    -- Clear existing hitbox if any
+    if hitboxParts[guard] then
+        hitboxParts[guard]:Destroy()
+        hitboxParts[guard] = nil
+    end
+    
+    if not hitboxEnabled then return end
+    
+    -- Create a new invisible part that will act as the hitbox
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "ExpandedHitbox"
+    hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+    hitbox.Transparency = hitboxTransparency
+    hitbox.Color = hitboxColor
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.Anchored = false
+    hitbox.CanCollide = false
+    hitbox.CFrame = hrp.CFrame
+    
+    -- Weld to the guard's HRP
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = hrp
+    weld.Part1 = hitbox
+    weld.Parent = hitbox
+    
+    hitbox.Parent = guard
+    hitboxParts[guard] = hitbox
+    
+    -- Make the original HRP invisible and non-collidable
+    hrp.Transparency = 1
+    hrp.CanCollide = false
+    
+    -- Cleanup when guard is removed
+    hitboxConnections[guard] = guard.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if hitboxParts[guard] then
+                hitboxParts[guard]:Destroy()
+                hitboxParts[guard] = nil
+            end
+            if hitboxConnections[guard] then
+                hitboxConnections[guard]:Disconnect()
+                hitboxConnections[guard] = nil
+            end
+            -- Restore original HRP properties if guard still exists
+            if guard.Parent then
+                if hrp then
+                    hrp.Transparency = 0
+                    hrp.CanCollide = true
+                end
+            end
+        end
+    end)
+end
+
+local function setupHitboxes()
+    -- Clear existing hitboxes
+    for guard, hitbox in pairs(hitboxParts) do
+        if hitbox and hitbox.Parent then
+            hitbox:Destroy()
+        end
+        -- Restore original HRP properties
+        if guard and guard.Parent then
+            local hrp = guard:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.Transparency = 0
+                hrp.CanCollide = true
+            end
+        end
+    end
+    table.clear(hitboxParts)
+    
+    for guard, conn in pairs(hitboxConnections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    table.clear(hitboxConnections)
+
+    if not hitboxEnabled then return end
+    
+    -- Find all existing guards
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
+           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
+            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
+            updateHitbox(obj)
+        end
+    end
+    
+    -- Listen for new guards
+    hitboxConnections.descendantAdded = workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and 
+           (obj.Name:lower():find("guard") or obj.Name:lower():find("triangle") or 
+            obj.Name:lower():find("squid") or obj.Name:lower():find("circle")) then
+            updateHitbox(obj)
+        end
+    end)
+end
 
 local function CreatePlayerESP(player)
     if not player.Character then return end
@@ -2834,13 +2347,7 @@ local function CreatePlayerESP(player)
 
     -- Auto-cleanup when player leaves
     playerESPConnections[player.."Removing"] = player.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            cleanup()
-            if playerESPConnections[player] then
-                playerESPConnections[player]:Disconnect()
-                playerESPConnections[player] = nil
-            end
-        end
+        if not parent then cleanup() end
     end)
 end
 
@@ -2881,22 +2388,6 @@ local function SetupPlayerESP()
         CreatePlayerESP(player)
     end)
 end
-
-Visual:Toggle({
-    Title = "ESP Players",
-    Desc = "Highlights all players with health display",
-    Value = false,
-    Callback = function(state)
-        playerESPEnabled = state
-        SetupPlayerESP()
-    end
-})
-
--- ESP Guards
-local guardESPEnabled = false
-local guardESPConnections = {}
-local guardHighlights = {}
-local guardBillboards = {}
 
 local function CreateGuardESP(guardModel)
     if not guardModel:FindFirstChild("Humanoid") then return end
@@ -3006,35 +2497,43 @@ local function SetupGuardESP()
     end)
 end
 
-Visual:Toggle({
-    Title = "ESP Guards",
-    Desc = "Highlights all guards in the game",
-    Value = false,
-    Callback = function(state)
-        guardESPEnabled = state
-        SetupGuardESP()
-    end
-})
-
 -- Handle character respawns for all toggles
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1) -- Wait for character to load
     
-    if invisibilityEnabled then
-        -- Reapply invisibility
-        local toggle = Utility:FindFirstChild("Invisibility")
-        if toggle then toggle.Callback(true) end
+    if noclipEnabled then
+        noclipLoop()
     end
     
-    if lightningGodEnabled then
-        -- Reapply lightning god
-        local toggle = Utility:FindFirstChild("Lightning God Awakening (Visual)")
-        if toggle then toggle.Callback(true) end
+    if currentWalkSpeed then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = currentWalkSpeed
+        end
     end
     
-    if guardAimbotEnabled then
-        -- Reapply guard aimbot
-        local toggle = Combat:FindFirstChild("Guard Aimbot")
-        if toggle then toggle.Callback(true) end
+    if hitboxEnabled then
+        setupHitboxes()
+    end
+    
+    if playerESPEnabled then
+        SetupPlayerESP()
+    end
+    
+    if guardESPEnabled then
+        SetupGuardESP()
     end
 end)
+
+-- Initialize ESP if enabled when script starts
+if playerESPEnabled then
+    SetupPlayerESP()
+end
+
+if guardESPEnabled then
+    SetupGuardESP()
+end
+
+if hitboxEnabled then
+    setupHitboxes()
+end
