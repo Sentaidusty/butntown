@@ -120,16 +120,6 @@ local Visual = GameSection:Tab({
 
 local lplr = game:GetService("Players").LocalPlayer
 
--- Function to show WindUI notification
-local function showNotification(title, message)
-    WindUI:Notify({
-        Title = title,
-        Description = message,
-        Duration = 5,
-        Callback = function() end
-    })
-end
-
 local function PlayerAimbot()
     local RunService = game:GetService("RunService")
     local Camera = workspace.CurrentCamera
@@ -321,7 +311,12 @@ Main:Button({
         end
 
         PatchAnticheat()
-        showNotification("Anti-Cheat", "AntiCheat bypass applied successfully")
+        WindUI:Notify({
+        Title = "Anti-Cheat",
+        Description = "AntiCheat bypass applied successfully",
+        Duration = 5,
+        Callback = function() end
+})
     end
 })
 
@@ -399,7 +394,6 @@ Main:Toggle({
     Callback = function(state)
         if state then
             if not hookmetamethod then
-                showNotification("Error", "Your executor doesn't support this feature")
                 return
             end
 
@@ -446,7 +440,12 @@ Main:Toggle({
                 return RLGL_OriginalNamecall(self, ...)
             end)
 
-            showNotification("RLGL Godmode", "Red Light Green Light Godmode Enabled")
+            WindUI:Notify({
+            Title = "RLGL Godmode",
+            Description = "Red Light Green Light Godmode Enabled",
+            Duration = 2,
+            Callback = function() end
+})
         else
             -- Cleanup
             if RLGL_Connection then
@@ -459,7 +458,12 @@ Main:Toggle({
                 RLGL_OriginalNamecall = nil
             end
             
-            showNotification("RLGL Godmode", "Red Light Green Light Godmode Disabled")
+            WindUI:Notify({
+    Title = "RLGL Godmode",
+    Description = "Red Light Green Light Godmode Disabled",
+    Duration = 2,
+    Callback = function() end
+})
         end
     end
 })
@@ -663,34 +667,90 @@ Main:Button({
     Callback = CompleteDalgona
 })
 
--- Crack Immunity
+-- Dalgona Immunity Variables
 local dalgonaImmuneEnabled = false
-local originalDalgonaHook
+local originalDalgonaHook = nil
+local dalgonaRemoteName = "DALGONATEMPREMPTE"  -- Adjust if remote name differs
+local dalgonaCompletionConnection = nil
 
-local function SetDalgonaImmune(enabled)
+-- Helper function to safely complete Dalgona
+local function autoCompleteDalgona()
+    pcall(function()
+        local remote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild(dalgonaRemoteName)
+        if remote then
+            -- Simulate perfect completion
+            remote:FireServer({Success = true})
+            remote:FireServer({Completed = true})
+            remote:FireServer({Perfect = true})
+        end
+    end)
+end
+
+-- Main Immunity Function
+local function setDalgonaImmune(enabled)
     if enabled then
+        -- Hook to block crack attempts
         originalDalgonaHook = hookmetamethod(game, "__namecall", function(self, ...)
+            local method = getnamecallmethod()
             local args = {...}
-            if tostring(self) == "DALGONATEMPREMPTE" and type(args[1]) == "table" and args[1].CrackAmount then
-                return nil -- Block crack damage
+
+            -- Block crack attempts silently
+            if tostring(self) == dalgonaRemoteName and method == "FireServer" then
+                if type(args[1]) == "table" and args[1].CrackAmount ~= nil then
+                    return nil  -- Block the crack
+                end
             end
+
             return originalDalgonaHook(self, ...)
         end)
-    elseif originalDalgonaHook then
-        hookmetamethod(game, "__namecall", originalDalgonaHook)
-        originalDalgonaHook = nil
+
+        -- Auto-completion system
+        dalgonaCompletionConnection = workspace.ChildAdded:Connect(function(child)
+            if child.Name == "DalgonaGame" or child.Name == "Effects" then
+                task.wait(0.5)  -- Wait for game to initialize
+                autoCompleteDalgona()
+            end
+        end)
+
+        -- Also check existing instances
+        for _, child in pairs(workspace:GetChildren()) do
+            if child.Name == "DalgonaGame" or child.Name == "Effects" then
+                autoCompleteDalgona()
+                break
+            end
+        end
+    else
+        -- Cleanup
+        if originalDalgonaHook then
+            hookmetamethod(game, "__namecall", originalDalgonaHook)
+            originalDalgonaHook = nil
+        end
+
+        if dalgonaCompletionConnection then
+            dalgonaCompletionConnection:Disconnect()
+            dalgonaCompletionConnection = nil
+        end
     end
 end
 
+
 Main:Toggle({
-    Title = "Crack Immunity (Not sure if work)",
-    Desc = "Prevents your dalgona from cracking",
+    Title = "Crack Immunity",
+    Desc = "Prevents your Dalgona from cracking",
     Value = false,
     Callback = function(state)
         dalgonaImmuneEnabled = state
-        SetDalgonaImmune(state)
+        setDalgonaImmune(state)
     end
 })
+
+-- Auto-reapply on character respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    if dalgonaImmuneEnabled then
+        task.wait(1)
+        setDalgonaImmune(true)
+    end
+end)
 
 Main:Section({Title = "Lights Out"})
 Main:Divider()
@@ -1128,10 +1188,6 @@ Combat:Button({
     end
 })
 
--- Guard Aimbot Toggle
-local guardAimbotEnabled = false
-local guardAimbotCleanup
-
 local function IsGuard(model)
     return model:IsA("Model") and 
            model:FindFirstChild("TypeOfGuard") and 
@@ -1160,56 +1216,60 @@ local function GetNearestGuard()
     return closest
 end
 
-Combat:Toggle({
-    Title = "Guard Aimbot",
-    Desc = "Automatically aims at the nearest guard",
-    Value = false,
-    Callback = function(state)
-        guardAimbotEnabled = state
-        if state then
-            local connection
-            connection = RunService.RenderStepped:Connect(function()
-                local guard = GetNearestGuard()
-                if not guard then return end
-                
-                -- Smooth aiming
-                local camPos = Camera.CFrame.Position
-                local lookVector = (guard.Position - camPos).Unit
-                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(camPos, camPos + lookVector), 0.2)
-            end)
-            
-            guardAimbotCleanup = function()
-                connection:Disconnect()
-            end
-        elseif guardAimbotCleanup then
-            guardAimbotCleanup()
-            guardAimbotCleanup = nil
+local validGuards = {}
+
+local function isGuard(model)
+    if not model:IsA("Model") or model == LocalPlayer.Character then return false end
+    if not model:FindFirstChild("TypeOfGuard") then return false end
+    local lowerName = model.Name:lower()
+    return (string.find(model.Name, "Rebel") or string.find(model.Name, "FinalRebel") or 
+            string.find(model.Name, "HallwayGuard") or string.find(lowerName, "aggro")) and
+            model:FindFirstChild("Humanoid") and model.Humanoid.Health > 0 and
+            not model:FindFirstChild("Dead")
+end
+
+local function PivotRebelGuardsToPlayer()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local root = LocalPlayer.Character.HumanoidRootPart
+    local guardCount = 0
+    local radius = 4
+    local angleStep = (2 * math.pi) / math.max(#validGuards, 1)
+    
+    for _, guard in ipairs(validGuards) do
+        if isGuard(guard) and guard:FindFirstChild("HumanoidRootPart") then
+            guardCount = guardCount + 1
+            local angle = angleStep * guardCount
+            local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+            local targetCF = CFrame.new(root.Position + offset, root.Position)
+            guard:PivotTo(targetCF)
         end
     end
-})
+end
 
-Combat:Toggle({
-    Title = "Player Aimbot",
-    Desc = "Automatically aims at the nearest player",
-    Value = false,
-    Callback = function(state)
-        if state then
-            local cleanup = PlayerAimbot()
-            -- Store cleanup function to disable later
-            getgenv().PlayerAimbotCleanup = cleanup
-            showNotification("Aimbot", "Player Aimbot enabled")
-        else
-            if getgenv().PlayerAimbotCleanup then
-                getgenv().PlayerAimbotCleanup()
-                getgenv().PlayerAimbotCleanup = nil
-                showNotification("Aimbot", "Player Aimbot disabled")
-            end
-        end
+-- Initialize guard tracking
+task.spawn(function()
+    local Live = workspace:WaitForChild("Live", 10)
+    if not Live then return end
+    
+    -- Initial scan
+    for _, v in pairs(Live:GetChildren()) do
+        if isGuard(v) then table.insert(validGuards, v) end
     end
-})
+    
+    -- Dynamic tracking
+    Live.ChildAdded:Connect(function(v)
+        if isGuard(v) then table.insert(validGuards, v) end
+    end)
+    
+    Live.ChildRemoved:Connect(function(v)
+        if isGuard(v) then
+            table.remove(validGuards, table.find(validGuards, v))
+        end
+    end)
+end)
 
-local bringGuardsEnabled = false
-local bringGuardsConnection
+-- Update the existing Bring Guards toggle to use the new function
 Combat:Toggle({
     Title = "Bring Guards",
     Desc = "Brings Guards",
@@ -1217,36 +1277,15 @@ Combat:Toggle({
     Callback = function(state)
         bringGuardsEnabled = state
         if state then
-            local lastUpdate = tick()
+            -- Refresh guard list
+            validGuards = {}
+            for _, v in pairs(workspace.Live:GetChildren()) do
+                if isGuard(v) then table.insert(validGuards, v) end
+            end
+            
+            -- Start bringing guards
             bringGuardsConnection = RunService.Heartbeat:Connect(function()
-                -- Add a 0.3 second delay between executions
-                if tick() - lastUpdate >= 0.3 then
-                    lastUpdate = tick()
-                    pcall(function()
-                        local player = game:GetService("Players").LocalPlayer
-                        local character = player.Character
-                        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                        
-                        if hrp then
-                            local offset = hrp.CFrame.lookVector * 5
-                            local targetPosition = hrp.Position + offset + Vector3.new(0, 3, 0)
-                            
-                            for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") then
-                                    local modelName = obj.Name:lower()
-                                    if modelName:find("triangle") or modelName:find("squid") or modelName:find("circle") or modelName:find("guard") then
-                                        local guardHrp = obj:FindFirstChild("HumanoidRootPart")
-                                        local humanoid = obj:FindFirstChildOfClass("Humanoid")
-                                        
-                                        if guardHrp and humanoid and humanoid.Health > 0 then
-                                            guardHrp.CFrame = guardHrp.CFrame:Lerp(CFrame.new(targetPosition), 0.1)
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-                end
+                PivotRebelGuardsToPlayer()
             end)
         else
             if bringGuardsConnection then
@@ -1352,6 +1391,59 @@ Combat:Toggle({
             if killAuraConnection then
                 killAuraConnection:Disconnect()
                 killAuraConnection = nil
+            end
+        end
+    end
+})
+
+Combat:Section({Title = "Aimbot"})
+Combat:Divider()
+
+-- Guard Aimbot Toggle
+local guardAimbotEnabled = false
+local guardAimbotCleanup
+
+Combat:Toggle({
+    Title = "Guard Aimbot",
+    Desc = "Automatically aims at the nearest guard",
+    Value = false,
+    Callback = function(state)
+        guardAimbotEnabled = state
+        if state then
+            local connection
+            connection = RunService.RenderStepped:Connect(function()
+                local guard = GetNearestGuard()
+                if not guard then return end
+                
+                -- Smooth aiming
+                local camPos = Camera.CFrame.Position
+                local lookVector = (guard.Position - camPos).Unit
+                Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(camPos, camPos + lookVector), 0.2)
+            end)
+            
+            guardAimbotCleanup = function()
+                connection:Disconnect()
+            end
+        elseif guardAimbotCleanup then
+            guardAimbotCleanup()
+            guardAimbotCleanup = nil
+        end
+    end
+})
+
+Combat:Toggle({
+    Title = "Player Aimbot",
+    Desc = "Automatically aims at the nearest player",
+    Value = false,
+    Callback = function(state)
+        if state then
+            local cleanup = PlayerAimbot()
+            -- Store cleanup function to disable later
+            getgenv().PlayerAimbotCleanup = cleanup
+        else
+            if getgenv().PlayerAimbotCleanup then
+                getgenv().PlayerAimbotCleanup()
+                getgenv().PlayerAimbotCleanup = nil
             end
         end
     end
@@ -2016,6 +2108,79 @@ Misc:Button({
                 safeZoneFolder = nil
             end
         end
+    end
+})
+
+local antiVoidEnabled = false
+local antiVoidPart = nil
+local antiVoidLoop = nil
+local antiVoidTouchConn = nil
+
+local function SetupAntiVoid(enabled)
+    if enabled then
+        -- Create anti-void part
+        antiVoidPart = Instance.new("Part")
+        antiVoidPart.Size = Vector3.new(10000, 1, 10000)
+        antiVoidPart.Transparency = 0.5
+        antiVoidPart.Material = Enum.Material.ForceField
+        antiVoidPart.Anchored = true
+        antiVoidPart.CanCollide = true
+        antiVoidPart.Parent = workspace
+        
+        -- Position below player
+        local function updatePosition()
+            local character = LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterDescendantsInstances = {character}
+                
+                local ray = workspace:Raycast(
+                    character.HumanoidRootPart.Position,
+                    Vector3.new(0, -1000, 0),
+                    raycastParams
+                )
+                
+                if ray then
+                    antiVoidPart.Position = ray.Position - Vector3.new(0, 15, 0)
+                end
+            end
+        end
+        
+        -- Update position periodically
+        antiVoidLoop = RunService.Heartbeat:Connect(function()
+            updatePosition()
+        end)
+        
+        -- Bounce player if they touch the anti-void
+        antiVoidTouchConn = antiVoidPart.Touched:Connect(function(part)
+            if part.Parent == LocalPlayer.Character and part:IsA("BasePart") then
+                part.Velocity = Vector3.new(part.Velocity.X, 100, part.Velocity.Z)
+            end
+        end)
+    else
+        -- Cleanup
+        if antiVoidPart then
+            antiVoidPart:Destroy()
+            antiVoidPart = nil
+        end
+        if antiVoidLoop then
+            antiVoidLoop:Disconnect()
+            antiVoidLoop = nil
+        end
+        if antiVoidTouchConn then
+            antiVoidTouchConn:Disconnect()
+            antiVoidTouchConn = nil
+        end
+    end
+end
+
+Misc:Toggle({
+    Title = "Anti Void",
+    Desc = "Prevents falling into the void",
+    Value = false,
+    Callback = function(state)
+        antiVoidEnabled = state
+        SetupAntiVoid(state)
     end
 })
 
@@ -2995,12 +3160,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         if toggle then toggle.Callback(true) end
     end
     
-    if lightningGodEnabled then
-        -- Reapply lightning god
-        local toggle = Utility:FindFirstChild("Lightning God Awakening (Visual)")
-        if toggle then toggle.Callback(true) end
-    end
-    
     if guardAimbotEnabled then
         -- Reapply guard aimbot
         local toggle = Combat:FindFirstChild("Guard Aimbot")
@@ -3009,6 +3168,11 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 if not hookmetamethod then
-    showNotification("Error", "Your executor doesn't support hookmetamethod")
+    WindUI:Notify({
+    Title = "Error",
+    Description = "Your executor doesn't support hookmetamethod",
+    Duration = 10,
+    Callback = function() end
+})
     return
 end
