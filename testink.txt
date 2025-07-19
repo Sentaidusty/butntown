@@ -1,4 +1,12 @@
-local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Sentaidusty/dustyrails/refs/heads/main/main.lua"))()
+local success, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Sentaidusty/dustyrails/refs/heads/main/main.lua"))()
+end)
+
+if not success then
+    warn("Failed to load WindUI:", WindUI)
+    return
+end
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -527,6 +535,7 @@ Main:Toggle({
             coroutine.wrap(AutoSaveInjured)()
         end
     end
+})
 
 -- Glass Bridge Section
 Main:Section({Title = "Glass Bridge"})
