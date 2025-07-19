@@ -133,19 +133,6 @@ ImportantGroup:AddToggle("AntiBanToggle", {
 })
 
 -- OP Section
-local OPSection = MainTab:AddRightGroupbox("OP")
-OPSection:AddToggle("TouchFlingToggle", {
-    Text = "Touch Fling",
-    Tooltip = "Fling anyone who touches you",
-    Default = false,
-    Callback = function(state)
-        hiddenfling = state
-        if state then
-            coroutine.wrap(fling)()
-        end
-    end
-})
-
 -- Fling function
 local function fling()
     local lp = Players.LocalPlayer
@@ -165,6 +152,19 @@ local function fling()
         end
     end
 end
+
+local OPSection = MainTab:AddRightGroupbox("OP")
+OPSection:AddToggle("TouchFlingToggle", {
+    Text = "Touch Fling",
+    Tooltip = "Fling anyone who touches you",
+    Default = false,
+    Callback = function(state)
+        hiddenfling = state
+        if state then
+            coroutine.wrap(fling)()
+        end
+    end
+})
 
 -- Anti-Fling
 local antiFlingEnabled = false
