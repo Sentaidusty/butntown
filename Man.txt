@@ -31,6 +31,9 @@ local rlglModule = {
     _CleanupFunction = nil  -- Add this line
 }
 
+Library.ForceCheckbox = false
+Library.ShowToggleFrameInKeybinds = true
+
 local Window = Library:CreateWindow({
     Title = "Agsy | Ink Game V2.6",
     Icon = 122545428580310,
