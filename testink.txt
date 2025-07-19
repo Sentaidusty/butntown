@@ -299,7 +299,7 @@ Main:Button({
                     return nil
                 end
                 return originalNewIndex(self, key, value)
-            end
+            end)
 
             -- Clean ragdolls
             local function cleanRagdoll(char)
@@ -445,7 +445,7 @@ Main:Toggle({
                     end
                 end
                 return RLGL_OriginalNamecall(self, ...)
-            end
+            end)
 
             showNotification("RLGL Godmode", "Red Light Green Light Godmode Enabled")
         else
